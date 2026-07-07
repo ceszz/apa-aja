@@ -52,7 +52,7 @@ local function createMailGui()
 
     local frame = Instance.new("Frame")
     frame.Name = "MainFrame"
-    frame.Size = UDim2.new(0, 420, 0, 320)
+    frame.Size = UDim2.new(0, 420, 0, 300)
     frame.Position = UDim2.new(0.5, -210, 0.12, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BorderSizePixel = 0
@@ -97,8 +97,8 @@ local function createMailGui()
 
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 150)
-    itemList.Position = UDim2.new(0.05, 0, 0, 150)
+    itemList.Size = UDim2.new(0.9, 0, 0, 100)
+    itemList.Position = UDim2.new(0.05, 0, 0.18, 0)
     itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
     itemList.ScrollBarThickness = 6
     itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
@@ -107,7 +107,7 @@ local function createMailGui()
     local selectedLabel = Instance.new("TextLabel")
     selectedLabel.Name = "SelectedLabel"
     selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
-    selectedLabel.Position = UDim2.new(0.05, 0, 0, 306)
+    selectedLabel.Position = UDim2.new(0.05, 0, 0.56, 0)
     selectedLabel.BackgroundTransparency = 1
     selectedLabel.Text = "Selected items: 0 | Qty: 0"
     selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
@@ -232,7 +232,7 @@ local function createMailGui()
     local selectAll = Instance.new("TextButton")
     selectAll.Name = "SelectAll"
     selectAll.Size = UDim2.new(0.18, 0, 0, 26)
-    selectAll.Position = UDim2.new(0.05, 0, 0.72, 0)
+    selectAll.Position = UDim2.new(0.05, 0, 0.62, 0)
     selectAll.Text = "Select All"
     selectAll.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectAll.TextColor3 = Color3.fromRGB(240,240,240)
@@ -244,7 +244,7 @@ local function createMailGui()
     local selectSeeds = Instance.new("TextButton")
     selectSeeds.Name = "SelectSeeds"
     selectSeeds.Size = UDim2.new(0.18, 0, 0, 26)
-    selectSeeds.Position = UDim2.new(0.26, 0, 0.72, 0)
+    selectSeeds.Position = UDim2.new(0.26, 0, 0.62, 0)
     selectSeeds.Text = "Select Seeds"
     selectSeeds.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectSeeds.TextColor3 = Color3.fromRGB(240,240,240)
@@ -256,7 +256,7 @@ local function createMailGui()
     local selectGear = Instance.new("TextButton")
     selectGear.Name = "SelectGear"
     selectGear.Size = UDim2.new(0.18, 0, 0, 26)
-    selectGear.Position = UDim2.new(0.47, 0, 0.72, 0)
+    selectGear.Position = UDim2.new(0.47, 0, 0.62, 0)
     selectGear.Text = "Select Gear"
     selectGear.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectGear.TextColor3 = Color3.fromRGB(240,240,240)
@@ -268,7 +268,7 @@ local function createMailGui()
     local selectPets = Instance.new("TextButton")
     selectPets.Name = "SelectPets"
     selectPets.Size = UDim2.new(0.18, 0, 0, 26)
-    selectPets.Position = UDim2.new(0.68, 0, 0.72, 0)
+    selectPets.Position = UDim2.new(0.68, 0, 0.62, 0)
     selectPets.Text = "Select Pets"
     selectPets.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectPets.TextColor3 = Color3.fromRGB(240,240,240)
@@ -279,8 +279,8 @@ local function createMailGui()
 
     local clearSel = Instance.new("TextButton")
     clearSel.Name = "ClearSelection"
-    clearSel.Size = UDim2.new(0.18, 0, 0, 26)
-    clearSel.Position = UDim2.new(0.05, 0, 0.80, 0)
+    clearSel.Size = UDim2.new(0.23, 0, 0, 26)
+    clearSel.Position = UDim2.new(0.05, 0, 0.70, 0)
     clearSel.Text = "Clear"
     clearSel.BackgroundColor3 = Color3.fromRGB(55,55,60)
     clearSel.TextColor3 = Color3.fromRGB(240,240,240)
@@ -292,7 +292,7 @@ local function createMailGui()
     local send = Instance.new("TextButton")
     send.Name = "SendButton"
     send.Size = UDim2.new(0.45, 0, 0, 26)
-    send.Position = UDim2.new(0.05, 0, 0.88, 0)
+    send.Position = UDim2.new(0.05, 0, 0.82, 0)
     send.Text = "Send Gift"
     send.BackgroundColor3 = Color3.fromRGB(60,120,180)
     send.TextColor3 = Color3.fromRGB(240,240,240)
@@ -304,7 +304,7 @@ local function createMailGui()
     local autoBtn = Instance.new("TextButton")
     autoBtn.Name = "AutoGiftButton"
     autoBtn.Size = UDim2.new(0.45, 0, 0, 26)
-    autoBtn.Position = UDim2.new(0.5, 0, 0.88, 0)
+    autoBtn.Position = UDim2.new(0.5, 0, 0.82, 0)
     autoBtn.Text = "Auto Gift OFF"
     autoBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
     autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
@@ -316,7 +316,7 @@ local function createMailGui()
     local syncBtn = Instance.new("TextButton")
     syncBtn.Name = "SyncInventory"
     syncBtn.Size = UDim2.new(0.9, 0, 0, 26)
-    syncBtn.Position = UDim2.new(0.05, 0, 0.66, 0)
+    syncBtn.Position = UDim2.new(0.05, 0, 0.49, 0)
     syncBtn.Text = "Sync Inventory"
     syncBtn.BackgroundColor3 = Color3.fromRGB(90,90,95)
     syncBtn.TextColor3 = Color3.fromRGB(240,240,240)
@@ -517,17 +517,34 @@ local function createMailGui()
                 local recip = usernameBox.Text
                 local targetCount = tonumber(quantityBox.Text) or 1
                 local selectedItems = getSelectedItems()
-                if recip ~= "" and #selectedItems > 0 then
-                    local totalQty = 0
-                    for _, item in ipairs(selectedItems) do
-                        totalQty = totalQty + item.qty
-                    end
-                    local sendCount = math.min(targetCount, totalQty)
-                    if sendCount > 0 then
-                        PlayerStatus("Auto Gift loop sending " .. tostring(sendCount) .. " items to " .. tostring(recip))
-                        AutoGiftMail(recip, sendCount)
-                    end
+                local totalQty = 0
+                for _, item in ipairs(selectedItems) do
+                    totalQty = totalQty + item.qty
                 end
+
+                if recip == "" then
+                    PlayerStatus("Auto Gift stopped: recipient username kosong")
+                    autoGiftEnabled = false
+                    updateAutoButton()
+                    break
+                end
+
+                if totalQty <= 0 then
+                    PlayerStatus("Auto Gift stopped: tidak ada item terpilih")
+                    autoGiftEnabled = false
+                    updateAutoButton()
+                    break
+                end
+
+                local sendCount = math.min(targetCount, totalQty)
+                PlayerStatus("Auto Gift loop sending " .. tostring(sendCount) .. " qty to " .. tostring(recip))
+                if not AutoGiftMail(recip, sendCount) then
+                    PlayerStatus("Auto Gift gagal")
+                    autoGiftEnabled = false
+                    updateAutoButton()
+                    break
+                end
+
                 wait(3)
             end
             autoGiftRunning = false
@@ -574,14 +591,14 @@ local function createMailGui()
     confirmBtn.Activated:Connect(function()
         confirmFrame.Visible = false
         local recip = usernameBox.Text
-        local count = 0
+        local totalQty = 0
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                count = count + 1
+                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
             end
         end
-        PlayerStatus("Confirmed send: " .. tostring(recip) .. " items=" .. tostring(count))
-        AutoGiftMail(recip, count)
+        PlayerStatus("Confirmed send: " .. tostring(recip) .. " qty=" .. tostring(totalQty))
+        AutoGiftMail(recip, totalQty)
     end)
 
     cancelBtn.Activated:Connect(function()
@@ -706,10 +723,23 @@ local function typeUsername(username)
     return true
 end
 
+local function clearSelectedItems()
+    local container = findGui(uiPath.ItemList)
+    if not container then
+        return
+    end
+    for _, child in ipairs(container:GetDescendants()) do
+        if child:IsA("TextButton") and child:GetAttribute and child:GetAttribute("Selected") then
+            child:SetAttribute("Selected", false)
+            child.BackgroundColor3 = Color3.fromRGB(60,60,60)
+        end
+    end
+end
+
 local function selectMailItems(itemCount)
     local container = findGui(uiPath.ItemList)
     if not container then
-        return itemCount
+        return itemCount, false
     end
 
     local selected = {}
@@ -720,16 +750,21 @@ local function selectMailItems(itemCount)
     end
 
     if #selected == 0 then
-        return itemCount
+        return itemCount, false
     end
 
+    local used = false
     for _, button in ipairs(selected) do
         if itemCount <= 0 then break end
-        activateButton(button)
-        itemCount = itemCount - 1
-        sleep(0.05)
+        local qty = tonumber(button:GetAttribute("Quantity")) or 1
+        if activateButton(button) then
+            itemCount = itemCount - qty
+            used = true
+            sleep(0.05)
+        end
     end
-    return itemCount
+
+    return math.max(itemCount, 0), used
 end
 
 local function clickSendMail()
@@ -756,16 +791,16 @@ local function AutoGiftMail(username, itemCount)
 
     sleep(0.5)
     while itemCount > 0 do
-        local remaining = selectMailItems(itemCount)
-        if remaining == itemCount then
+        local remaining, used = selectMailItems(itemCount)
+        if not used then
             PlayerStatus("No mail items selected")
-            break
+            return false
         end
 
         itemCount = remaining
         if not clickSendMail() then
             PlayerStatus("Send button not found")
-            break
+            return false
         end
 
         sleep(1.5)
