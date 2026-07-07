@@ -27,6 +27,20 @@ local uiPath = {
     SendButton = {"MailGui", "MainFrame", "SendButton"},
 }
 
+local function categorizeItem(name)
+    local lower = string.lower(name)
+    if lower:find("seed") then
+        return "Seeds"
+    end
+    if lower:find("watering") or lower:find("shovel") or lower:find("fertilizer") or lower:find("harvester") or lower:find("auto") or lower:find("can") then
+        return "Gear"
+    end
+    if lower:find("dragon") or lower:find("raccoon") or lower:find("unicorn") or lower:find("slime") or lower:find("dog") or lower:find("cat") or lower:find("moon") or lower:find("fly") or lower:find("snake") then
+        return "Pets"
+    end
+    return "Other"
+end
+
 local function createMailGui()
     if PlayerGui:FindFirstChild("MailGui") then
         return
@@ -38,7 +52,7 @@ local function createMailGui()
 
     local frame = Instance.new("Frame")
     frame.Name = "MainFrame"
-    frame.Size = UDim2.new(0, 340, 0, 300)
+    frame.Size = UDim2.new(0, 340, 0, 380)
     frame.Position = UDim2.new(0.5, -170, 0.12, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BorderSizePixel = 0
@@ -59,39 +73,95 @@ local function createMailGui()
     local usernameBox = Instance.new("TextBox")
     usernameBox.Name = "UsernameBox"
     usernameBox.PlaceholderText = "Recipient Username"
-    usernameBox.Size = UDim2.new(0.9, 0, 0, 30)
+    usernameBox.Size = UDim2.new(0.9, 0, 0, 28)
     usernameBox.Position = UDim2.new(0.05, 0, 0, 40)
+    usernameBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
+    usernameBox.TextColor3 = Color3.fromRGB(240,240,240)
+    usernameBox.Text = tostring(settings.AutoMail.username)
+    usernameBox.ClearTextOnFocus = false
     usernameBox.Parent = frame
+
+    local quantityBox = Instance.new("TextBox")
+    quantityBox.Name = "QuantityBox"
+    quantityBox.PlaceholderText = "Jumlah item"
+    quantityBox.Size = UDim2.new(0.9, 0, 0, 28)
+    quantityBox.Position = UDim2.new(0.05, 0, 0, 76)
+    quantityBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
+    quantityBox.TextColor3 = Color3.fromRGB(240,240,240)
+    quantityBox.Text = tostring(settings.AutoMail.itemcount)
+    quantityBox.ClearTextOnFocus = false
+    quantityBox.Parent = frame
+
+    local categoryLabel = Instance.new("TextLabel")
+    categoryLabel.Name = "CategoryLabel"
+    categoryLabel.Size = UDim2.new(0.9, 0, 0, 20)
+    categoryLabel.Position = UDim2.new(0.05, 0, 0, 112)
+    categoryLabel.BackgroundTransparency = 1
+    categoryLabel.Text = "Filter kategori:"
+    categoryLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    categoryLabel.Font = Enum.Font.Gotham
+    categoryLabel.TextSize = 12
+    categoryLabel.TextXAlignment = Enum.TextXAlignment.Left
+    categoryLabel.Parent = frame
 
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 160)
-    itemList.Position = UDim2.new(0.05, 0, 0, 80)
+    itemList.Size = UDim2.new(0.9, 0, 0, 170)
+    itemList.Position = UDim2.new(0.05, 0, 0, 160)
     itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
     itemList.ScrollBarThickness = 6
     itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
     itemList.Parent = frame
+
+    local selectedLabel = Instance.new("TextLabel")
+    selectedLabel.Name = "SelectedLabel"
+    selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
+    selectedLabel.Position = UDim2.new(0.05, 0, 0, 334)
+    selectedLabel.BackgroundTransparency = 1
+    selectedLabel.Text = "Selected items: 0 | Qty: 0"
+    selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
+    selectedLabel.Font = Enum.Font.Gotham
+    selectedLabel.TextSize = 12
+    selectedLabel.TextXAlignment = Enum.TextXAlignment.Left
+    selectedLabel.Parent = frame
 
     local uiLayout = Instance.new("UIListLayout")
     uiLayout.Parent = itemList
     uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
     uiLayout.Padding = UDim.new(0, 6)
 
-    -- helper: add an item button (name, label)
+    local currentCategory = "All"
+    local categories = {"All", "Seeds", "Gear", "Pets", "Other"}
+    local function updateItemVisibility()
+        for _, itemButton in ipairs(itemList:GetChildren()) do
+            if itemButton:IsA("TextButton") then
+                local category = itemButton:GetAttribute("Category") or "Other"
+                itemButton.Visible = (currentCategory == "All") or (category == currentCategory)
+            end
+        end
+    end
+
+    local function formatItemLabel(label, quantity, category)
+        local result = label or ""
+        if quantity and tonumber(quantity) then
+            result = result .. " x" .. tostring(quantity)
+        end
+        result = result .. " [" .. category .. "]"
+        return result
+    end
+
     local function addItem(name, label, quantity)
+        local category = categorizeItem(name)
         local b = Instance.new("TextButton")
         b.Name = name
         b.Size = UDim2.new(1, -10, 0, 30)
-        if quantity and tonumber(quantity) then
-            b.Text = (label or name) .. " x" .. tostring(quantity)
-        else
-            b.Text = label or name
-        end
+        b.Text = formatItemLabel(label or name, quantity, category)
         b.AutoButtonColor = true
         b.BackgroundColor3 = Color3.fromRGB(60,60,60)
         b.TextColor3 = Color3.fromRGB(240,240,240)
         b.Parent = itemList
         b:SetAttribute("Selected", false)
+        b:SetAttribute("Category", category)
         if quantity then
             b:SetAttribute("Quantity", quantity)
         end
@@ -104,9 +174,48 @@ local function createMailGui()
             else
                 b.BackgroundColor3 = Color3.fromRGB(60,60,60)
             end
+            if selectedLabel then
+                local selectedCount = 0
+                local totalQty = 0
+                for _, child in ipairs(itemList:GetChildren()) do
+                    if child:IsA("TextButton") and child:GetAttribute("Selected") then
+                        selectedCount = selectedCount + 1
+                        local qty = tonumber(child:GetAttribute("Quantity")) or 1
+                        totalQty = totalQty + qty
+                    end
+                end
+                selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
+            end
         end)
         return b
     end
+
+    local categoryButtons = {}
+    for index, categoryName in ipairs(categories) do
+        local catBtn = Instance.new("TextButton")
+        catBtn.Name = categoryName .. "Button"
+        catBtn.Size = UDim2.new(0, 60, 0, 24)
+        catBtn.Position = UDim2.new(0, 10 + ((index - 1) * 66), 0, 34)
+        catBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
+        catBtn.TextColor3 = Color3.fromRGB(220,220,220)
+        catBtn.Text = categoryName
+        catBtn.Font = Enum.Font.Gotham
+        catBtn.TextSize = 12
+        catBtn.Parent = frame
+        Instance.new("UICorner", catBtn).CornerRadius = UDim.new(0, 6)
+
+        catBtn.Activated:Connect(function()
+            currentCategory = categoryName
+            updateItemVisibility()
+            for _, otherBtn in ipairs(categoryButtons) do
+                otherBtn.BackgroundColor3 = (otherBtn == catBtn) and Color3.fromRGB(78, 132, 173) or Color3.fromRGB(45,45,50)
+            end
+        end)
+        table.insert(categoryButtons, catBtn)
+    end
+
+    categoryButtons[1].BackgroundColor3 = Color3.fromRGB(78,132,173)
+    categoryButtons[1].TextColor3 = Color3.fromRGB(255,255,255)
 
     -- sample items for testing (will be replaced by SyncInventory)
     for i = 1, 6 do
@@ -117,29 +226,38 @@ local function createMailGui()
     local selectAll = Instance.new("TextButton")
     selectAll.Name = "SelectAll"
     selectAll.Size = UDim2.new(0.2, 0, 0, 28)
-    selectAll.Position = UDim2.new(0.05, 0, 1, -42)
+    selectAll.Position = UDim2.new(0.05, 0, 0.86, 0)
     selectAll.Text = "Select All"
     selectAll.Parent = frame
 
     local clearSel = Instance.new("TextButton")
     clearSel.Name = "ClearSelection"
     clearSel.Size = UDim2.new(0.2, 0, 0, 28)
-    clearSel.Position = UDim2.new(0.27, 0, 1, -42)
+    clearSel.Position = UDim2.new(0.27, 0, 0.86, 0)
     clearSel.Text = "Clear"
     clearSel.Parent = frame
+
+    local autoBtn = Instance.new("TextButton")
+    autoBtn.Name = "AutoGiftButton"
+    autoBtn.Size = UDim2.new(0.2, 0, 0, 28)
+    autoBtn.Position = UDim2.new(0.49, 0, 0.86, 0)
+    autoBtn.Text = "Auto Gift"
+    autoBtn.BackgroundColor3 = Color3.fromRGB(90, 135, 90)
+    autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
+    autoBtn.Parent = frame
 
     local send = Instance.new("TextButton")
     send.Name = "SendButton"
     send.Size = UDim2.new(0.2, 0, 0, 28)
-    send.Position = UDim2.new(0.49, 0, 1, -42)
+    send.Position = UDim2.new(0.71, 0, 0.86, 0)
     send.Text = "Send"
     send.Parent = frame
 
     local syncBtn = Instance.new("TextButton")
     syncBtn.Name = "SyncInventory"
-    syncBtn.Size = UDim2.new(0.2, 0, 0, 28)
-    syncBtn.Position = UDim2.new(0.71, 0, 1, -42)
-    syncBtn.Text = "Sync"
+    syncBtn.Size = UDim2.new(0.9, 0, 0, 28)
+    syncBtn.Position = UDim2.new(0.05, 0, 0.93, 0)
+    syncBtn.Text = "Sync Inventory"
     syncBtn.Parent = frame
 
     local mailButton = Instance.new("TextButton")
@@ -147,7 +265,7 @@ local function createMailGui()
     mailButton.Size = UDim2.new(0, 80, 0, 30)
     mailButton.Position = UDim2.new(0, 8, 0, 8)
     mailButton.Text = "Mail"
-    mailButton.Parent = screen
+    -- parent set at end to allow integration with existing hack GUI if present
 
     mailButton.Activated:Connect(function()
         frame.Visible = not frame.Visible
@@ -190,12 +308,16 @@ local function createMailGui()
     cancelBtn.Parent = confirmFrame
 
     selectAll.Activated:Connect(function()
+        local selectedCount, totalQty = 0, 0
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") then
                 child:SetAttribute("Selected", true)
                 child.BackgroundColor3 = Color3.fromRGB(80,140,80)
+                selectedCount = selectedCount + 1
+                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
             end
         end
+        selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
     end)
 
     clearSel.Activated:Connect(function()
@@ -205,6 +327,7 @@ local function createMailGui()
                 child.BackgroundColor3 = Color3.fromRGB(60,60,60)
             end
         end
+        selectedLabel.Text = "Selected items: 0 | Qty: 0"
     end)
 
     -- sync inventory: try common locations (Backpack, Character, Inventory, ReplicatedStorage)
@@ -296,6 +419,8 @@ local function createMailGui()
         spawn(function()
             wait()
             itemList.CanvasSize = UDim2.new(0, 0, 0, uiLayout.AbsoluteContentSize.Y)
+            updateItemVisibility()
+            selectedLabel.Text = "Selected items: 0 | Qty: 0"
             PlayerStatus("Inventory synced: " .. tostring(added))
         end)
     end
@@ -304,19 +429,52 @@ local function createMailGui()
         syncInventory()
     end)
 
+    autoBtn.Activated:Connect(function()
+        local recip = usernameBox.Text
+        local targetCount = tonumber(quantityBox.Text) or 1
+        if recip == "" then
+            PlayerStatus("Masukkan username penerima terlebih dahulu")
+            return
+        end
+        if targetCount <= 0 then
+            PlayerStatus("Jumlah item harus lebih besar dari 0")
+            return
+        end
+
+        local selectedCount = 0
+        local totalQty = 0
+        for _, child in ipairs(itemList:GetChildren()) do
+            if child:IsA("TextButton") and child:GetAttribute("Selected") then
+                selectedCount = selectedCount + 1
+                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
+            end
+        end
+        if selectedCount == 0 then
+            PlayerStatus("Tidak ada item terpilih untuk auto gift")
+            return
+        end
+
+        local sendCount = math.min(targetCount, totalQty)
+        PlayerStatus("Auto Gift started: " .. tostring(recip) .. " | Selected: " .. tostring(selectedCount) .. " | Send Qty: " .. tostring(sendCount))
+        AutoGiftMail(recip, sendCount)
+    end)
+
     send.Activated:Connect(function()
         local recip = usernameBox.Text
         local selectedList = {}
+        local totalQty = 0
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                table.insert(selectedList, {name = child.Name, qty = child:GetAttribute("Quantity")})
+                local qty = tonumber(child:GetAttribute("Quantity")) or 1
+                totalQty = totalQty + qty
+                table.insert(selectedList, {name = child.Name, qty = qty})
             end
         end
         if #selectedList == 0 then
             PlayerStatus("No items selected")
             return
         end
-        local summary = "Send to: " .. tostring(recip) .. "\nItems:\n"
+        local summary = "Send to: " .. tostring(recip) .. "\nTotal Items: " .. tostring(#selectedList) .. "\nTotal Qty: " .. tostring(totalQty) .. "\nItems:\n"
         for _, it in ipairs(selectedList) do
             summary = summary .. "- " .. tostring(it.name)
             if it.qty then summary = summary .. " x" .. tostring(it.qty) end
@@ -349,7 +507,22 @@ local function createMailGui()
         itemList.CanvasSize = UDim2.new(0, 0, 0, uiLayout.AbsoluteContentSize.Y)
     end)
 
-    screen.Parent = PlayerGui
+    -- If a known external GUI exists (e.g. MainHackGUI), parent our mail UI there for integration
+    local hackGui = PlayerGui:FindFirstChild("MainHackGUI") or PlayerGui:FindFirstChild("MainHack")
+    if hackGui and hackGui:IsA("ScreenGui") then
+        screen.Parent = hackGui
+        -- try to attach the toggle button to the hack GUI's main frame if available
+        local targetFrame = hackGui:FindFirstChild("MainFrame") or hackGui:FindFirstChildWhichIsA("Frame")
+        if targetFrame then
+            mailButton.Parent = targetFrame
+            mailButton.Position = UDim2.new(0, 8, 0, 8)
+        else
+            mailButton.Parent = screen
+        end
+    else
+        screen.Parent = PlayerGui
+        mailButton.Parent = screen
+    end
 end
 local function sleep(seconds)
     if task and task.wait then
