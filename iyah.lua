@@ -674,7 +674,7 @@ local function createMailGui()
     usernameBox.Name = "UsernameBox"
     usernameBox.PlaceholderText = "Recipient Username"
     usernameBox.Size = UDim2.new(0.6, 0, 0, 32)
-    usernameBox.Position = UDim2.new(0, 8, 0, 266)
+    usernameBox.Position = UDim2.new(0, 8, 0, 220)
     usernameBox.BackgroundColor3 = Color3.fromRGB(52, 52, 58)
     usernameBox.TextColor3 = Color3.fromRGB(240, 240, 240)
     usernameBox.Text = settings.AutoMail.username
@@ -684,7 +684,7 @@ local function createMailGui()
     quantityBox.Name = "QuantityBox"
     quantityBox.PlaceholderText = "Qty to send"
     quantityBox.Size = UDim2.new(0.28, 0, 0, 32)
-    quantityBox.Position = UDim2.new(0.62, 0, 0, 266)
+    quantityBox.Position = UDim2.new(0.62, 0, 0, 220)
     quantityBox.BackgroundColor3 = Color3.fromRGB(52, 52, 58)
     quantityBox.TextColor3 = Color3.fromRGB(240, 240, 240)
     quantityBox.Text = tostring(settings.AutoMail.itemcount)
@@ -693,7 +693,7 @@ local function createMailGui()
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
     statusLabel.Size = UDim2.new(1, -16, 0, 22)
-    statusLabel.Position = UDim2.new(0, 8, 0, 306)
+    statusLabel.Position = UDim2.new(0, 8, 0, 260)
     statusLabel.BackgroundTransparency = 1
     statusLabel.Text = "Ready"
     statusLabel.TextColor3 = Color3.fromRGB(215, 215, 215)
@@ -783,21 +783,22 @@ local function createMailGui()
             end
         end
     end
-    local function getSelectedItems()
-        local selected = {}
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                table.insert(selected, {
-                    name = child:GetAttribute("DisplayName") or extractName(child),
-                    key = child:GetAttribute("ItemKey") or extractName(child),
-                    category = child:GetAttribute("Category") or categorizeItem(child:GetAttribute("DisplayName") or extractName(child)),
-                    inventoryCategory = child:GetAttribute("InventoryCategory") or child:GetAttribute("Category"),
-                    qty = tonumber(child:GetAttribute("Quantity")) or 1,
-                })
-            end
+local function getSelectedItems()
+    local selected = {}
+    for _, child in ipairs(itemList:GetChildren()) do
+        if child:IsA("TextButton") and child:GetAttribute("Selected") then
+            table.insert(selected, {
+                name = child:GetAttribute("DisplayName"),
+                key = child:GetAttribute("ItemKey"),
+                category = child:GetAttribute("Category"),
+                inventoryCategory = child:GetAttribute("InventoryCategory"),
+                qty = tonumber(child:GetAttribute("Quantity")) or 1
+            })
         end
-        return selected
     end
+    return selected
+end
+
     local function sendByMail(recipient, maxQty)
         setStatus("Preparing mail batch...")
         local username = normalizeUsername(recipient)
@@ -839,11 +840,11 @@ local function createMailGui()
     end
     local syncButton = Instance.new("TextButton")
     syncButton.Name = "SyncButton"
-    syncButton.Size = UDim2.new(0.3, 0, 0, 32)
-    syncButton.Position = UDim2.new(0, 8, 0, 266)
+    syncButton.Size = UDim2.new(0.3, 0, 0, 28)
+    syncButton.Position = UDim2.new(0.7, -8, 0, 300)
     syncButton.Text = "Sync Inventory"
-    syncButton.BackgroundColor3 = Color3.fromRGB(78, 78, 88)
-    syncButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    syncButton.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+    syncButton.TextColor3 = Color3.fromRGB(240, 240, 240)
     syncButton.Font = Enum.Font.Gotham
     syncButton.TextSize = 12
     syncButton.Parent = frame
@@ -854,7 +855,7 @@ local function createMailGui()
     sendButton.Position = UDim2.new(0.34, 0, 0, 266)
     sendButton.Text = "Send Mail"
     sendButton.BackgroundColor3 = Color3.fromRGB(75, 125, 180)
-    sendButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    sendButton.TextColor3 = Color3.fromRGB(240, 240, 240)
     sendButton.Font = Enum.Font.Gotham
     sendButton.TextSize = 12
     sendButton.Parent = frame
