@@ -791,7 +791,7 @@ local function clearSelectedItems()
         return
     end
     for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("TextButton") and child:GetAttribute and child:GetAttribute("Selected") then
+        if child:IsA("TextButton") and child:GetAttribute("Selected") then
             child:SetAttribute("Selected", false)
             child.BackgroundColor3 = Color3.fromRGB(60,60,60)
         end
@@ -806,7 +806,7 @@ local function selectMailItems(itemCount)
 
     local selected = {}
     for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("TextButton") and child.GetAttribute and child:GetAttribute("Selected") then
+        if child:IsA("TextButton") and child:GetAttribute("Selected") then
             table.insert(selected, child)
         end
     end
