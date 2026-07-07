@@ -1,5 +1,6 @@
 -- Roblox exploit-friendly Auto Gift Mail script for Grow A Garden 2
 -- Script dioptimalkan untuk deteksi inventory dan mail UI.
+
 -- luacheck: globals game task wait
 ---@diagnostic disable: undefined-global
 
@@ -800,19 +801,21 @@ end
 
 local function sendByMail(recipient, maxQty)
     local userId = lookupRecipient(recipient)
-        if not userId then
-            setStatus("Recipient tidak ditemukan")
-            return
-        end
-        local items = getSelectedItems()
-        local payload, sent = buildPayloadFromSelection(items, tonumber(maxQty) or 1)
-        if sent == 0 then
-            setStatus("Tidak ada item terpilih")
-            return
-        end
-        local ok, msg = sendBatch(userId, payload, "")
-            setStatus(ok and msg or ("Gagal: " .. msg))
-        end
+    if not userId then
+        setStatus("Recipient tidak ditemukan")
+        return
+    end
+
+    local items = getSelectedItems()
+    local payload, sent = buildPayloadFromSelection(items, tonumber(maxQty) or 1)
+    if sent == 0 then
+        setStatus("Tidak ada item terpilih")
+        return
+    end
+
+    local ok, msg = sendBatch(userId, payload, "")
+    setStatus(ok and msg or ("Gagal: " .. msg))
+end
 
 
     
@@ -934,19 +937,21 @@ local function sendByMail(recipient, maxQty)
         end
         return items, total
     end
-local autoGiftEnabled = false
 
-local function toggleAutoGift(username, qty)
+local autoGiftEnabled = false
+autoGiftButton.Activated:Connect(function()
     autoGiftEnabled = not autoGiftEnabled
+    autoGiftButton.Text = autoGiftEnabled and "Auto Gift: ON" or "Auto Gift: OFF"
     if autoGiftEnabled then
         task.spawn(function()
             while autoGiftEnabled do
-                sendByMail(username, qty)
+                sendByMail(usernameBox.Text, quantityBox.Text)
                 task.wait(2)
             end
         end)
     end
-end
+end)
+
 
 
     -- Toggle Auto Buy ON/OFF
@@ -1016,9 +1021,10 @@ local function clearItems()
     refreshInventory()
 end
 
-    sendButton.Activated:Connect(function()
-        sendByMail(usernameBox.Text, quantityBox.Text)
+   sendButton.Activated:Connect(function()
+    sendByMail(usernameBox.Text, quantityBox.Text)
     end)
+
 
     
     selectAllButton.Activated:Connect(function()
