@@ -418,70 +418,112 @@ local function createMailGui()
             if v:IsA("StringValue") then
                 return v.Value or v.Name
             end
-            if v:IsA("Folder") or v:IsA("Tool") or v:IsA("Model") then
-                return v.Name
-            end
-            if v:IsA("TextLabel") or v:IsA("TextButton") then
-                return v.Text
-            end
             return v.Name
         end
 
         local function getObjectQuantity(v)
             if v.GetAttribute then
-                local q = v:GetAttribute("Quantity") or v:GetAttribute("Amount") or v:GetAttribute("Count")
-                if tonumber(q) then return tonumber(q) end
-            end
-            if v:FindFirstChild("Quantity") and v.Quantity:IsA("IntValue") then
-                return v.Quantity.Value
-            end
-            if v:FindFirstChild("Amount") and v.Amount:IsA("IntValue") then
-                return v.Amount.Value
-            end
-            if v:FindFirstChild("Count") and v.Count:IsA("IntValue") then
-                return v.Count.Value
+                for _, key in ipairs({"Quantity", "Amount", "Count", "Stack", "StackSize"}) do
+                    local q = v:GetAttribute(key)
+                    if tonumber(q) then
+                        return tonumber(q)
+                    end
+                end
             end
             if v:IsA("IntValue") or v:IsA("NumberValue") then
                 return v.Value
             end
+            for _, key in ipairs({"Quantity", "Amount", "Count", "Stack", "StackSize"}) do
+                local child = v:FindFirstChild(key)
+                if child and (child:IsA("IntValue") or child:IsA("NumberValue")) then
+                    return child.Value
+                end
+            end
             return 1
         end
 
-        local added = 0
+        local function isInventoryContainer(obj)
+            return obj and (obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("Folder") or obj:IsA("Folder"))
+        end
 
         local function scanContainer(container)
             if not container then return end
-            for _, v in ipairs(container:GetDescendants()) do
-                if v:IsA("Instance") then
-                    local name = getObjectName(v)
-                    local qty = getObjectQuantity(v)
+            for _, item in ipairs(container:GetChildren()) do
+                local name = getObjectName(item)
+                local qty = getObjectQuantity(item)
+                if item:IsA("Tool") or item:IsA("Model") or item:IsA("Folder") then
+                    addInventoryItem(name, qty)
+                    for _, child in ipairs(item:GetChildren()) do
+                        if child:IsA("Tool") or child:IsA("Model") or child:IsA("Folder") then
+                            local childName = getObjectName(child)
+                            local childQty = getObjectQuantity(child)
+                            addInventoryItem(childName, childQty)
+                        end
+                    end
+                elseif item:IsA("StringValue") or item:IsA("ObjectValue") then
+                    addInventoryItem(name, qty)
+                elseif item:IsA("IntValue") or item:IsA("NumberValue") then
+                    -- skip raw numeric values inside item containers
+                else
                     addInventoryItem(name, qty)
                 end
             end
         end
 
-        -- 1) Backpack (tools)
-        scanContainer(LocalPlayer:FindFirstChild("Backpack"))
-
-        -- 2) Character (equipped tools)
-        scanContainer(LocalPlayer.Character)
-
-        -- 3) Common inventory containers on player
-        scanContainer(LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("_Inventory") or LocalPlayer:FindFirstChild("Items"))
-
-        -- 4) ReplicatedStorage / Server storage variants
-        scanContainer(game:GetService("ReplicatedStorage"):FindFirstChild("Inventory") or game:GetService("ReplicatedStorage"):FindFirstChild("Items") or game:GetService("ReplicatedStorage"):FindFirstChild("Shop"))
-
-        -- 5) Workspace drops (optional)
-        scanContainer(workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("Drops"))
-
-        -- 6) fallback sample
-        if next(inventoryMap) == nil then
-            inventoryMap["Item1"] = 1
-            inventoryMap["Item2"] = 1
-            inventoryMap["Item3"] = 1
+        local function findContainers(root)
+            local result = {}
+            local seen = {}
+            local names = {"Backpack", "Inventory", "_Inventory", "Items", "Store", "Shop", "Storage", "Bag", "Chest"}
+            local function addIfValid(obj)
+                if obj and not seen[obj] and obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Tool") then
+                    table.insert(result, obj)
+                    seen[obj] = true
+                end
+            end
+            if root then
+                for _, name in ipairs(names) do
+                    addIfValid(root:FindFirstChild(name))
+                end
+                for _, descendant in ipairs(root:GetDescendants()) do
+                    if descendant:IsA("Folder") or descendant:IsA("Model") or descendant:IsA("Tool") then
+                        local lname = descendant.Name:lower()
+                        for _, key in ipairs(names) do
+                            if lname:find(key:lower(), 1, true) then
+                                addIfValid(descendant)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+            return result
         end
 
+        local containers = {}
+        local function addContainersFrom(root)
+            for _, c in ipairs(findContainers(root)) do
+                table.insert(containers, c)
+            end
+        end
+
+        addContainersFrom(LocalPlayer)
+        addContainersFrom(LocalPlayer.Character)
+        addContainersFrom(game:GetService("ReplicatedStorage"))
+        addContainersFrom(game:GetService("ServerStorage"))
+        addContainersFrom(game:GetService("StarterPack"))
+        addContainersFrom(workspace)
+
+        if #containers == 0 then
+            addInventoryItem("Item1", 1)
+            addInventoryItem("Item2", 1)
+            addInventoryItem("Item3", 1)
+        else
+            for _, container in ipairs(containers) do
+                scanContainer(container)
+            end
+        end
+
+        local added = 0
         for name, qty in pairs(inventoryMap) do
             addItem(name, name, qty)
             added = added + 1
