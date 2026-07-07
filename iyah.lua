@@ -12,7 +12,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local settings = {
     AutoMail = {
-        username = "Player1",
+        username = "Ceszganteng",
         itemcount = 20,
     },
     Settings = {
@@ -130,11 +130,27 @@ local function createMailGui()
     title.TextSize = 20
     title.Parent = frame
 
+    local categoryButtonsFrame = Instance.new("Frame")
+    categoryButtonsFrame.Name = "CategoryButtonsFrame"
+    categoryButtonsFrame.Size = UDim2.new(0.9, 0, 0, 32)
+    categoryButtonsFrame.Position = UDim2.new(0.05, 0, 0.10, 0)
+    categoryButtonsFrame.BackgroundTransparency = 1
+    categoryButtonsFrame.Parent = frame
+
+    local itemList = Instance.new("ScrollingFrame")
+    itemList.Name = "ItemList"
+    itemList.Size = UDim2.new(0.9, 0, 0, 120)
+    itemList.Position = UDim2.new(0.05, 0, 0.18, 0)
+    itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    itemList.ScrollBarThickness = 6
+    itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    itemList.Parent = frame
+
     local usernameBox = Instance.new("TextBox")
     usernameBox.Name = "UsernameBox"
     usernameBox.PlaceholderText = "Recipient Username"
     usernameBox.Size = UDim2.new(0.63, 0, 0, 28)
-    usernameBox.Position = UDim2.new(0.05, 0, 0, 40)
+    usernameBox.Position = UDim2.new(0.05, 0, 0.62, 0)
     usernameBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
     usernameBox.TextColor3 = Color3.fromRGB(240,240,240)
     usernameBox.Text = tostring(settings.AutoMail.username)
@@ -145,27 +161,17 @@ local function createMailGui()
     quantityBox.Name = "QuantityBox"
     quantityBox.PlaceholderText = "Jumlah item"
     quantityBox.Size = UDim2.new(0.27, 0, 0, 28)
-    quantityBox.Position = UDim2.new(0.70, 0, 0, 40)
+    quantityBox.Position = UDim2.new(0.70, 0, 0.62, 0)
     quantityBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
     quantityBox.TextColor3 = Color3.fromRGB(240,240,240)
     quantityBox.Text = tostring(settings.AutoMail.itemcount)
     quantityBox.ClearTextOnFocus = false
     quantityBox.Parent = frame
 
-
-    local itemList = Instance.new("ScrollingFrame")
-    itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 110)
-    itemList.Position = UDim2.new(0.05, 0, 0.18, 0)
-    itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
-    itemList.ScrollBarThickness = 6
-    itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    itemList.Parent = frame
-
     local selectedLabel = Instance.new("TextLabel")
     selectedLabel.Name = "SelectedLabel"
     selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
-    selectedLabel.Position = UDim2.new(0.05, 0, 0.55, 0)
+    selectedLabel.Position = UDim2.new(0.05, 0, 0.56, 0)
     selectedLabel.BackgroundTransparency = 1
     selectedLabel.Text = "Selected items: 0 | Qty: 0"
     selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
@@ -180,7 +186,7 @@ local function createMailGui()
     uiLayout.Padding = UDim.new(0, 6)
 
     local selectedCategory = "All"
-    local categoryNames = {"All", "Seeds", "Gear", "Pets", "Other"}
+    local categoryNames = {"All", "Seeds", "Gear", "Pets"}
 
     local function updateSelectedStats()
         local selectedCount, totalQty = 0, 0
@@ -259,13 +265,13 @@ local function createMailGui()
         local catBtn = Instance.new("TextButton")
         catBtn.Name = categoryName .. "FilterBtn"
         catBtn.Size = UDim2.new(0, 58, 0, 24)
-        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.16), 0, 0.58, 0)
+        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.16), 0, 0, 0)
         catBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
         catBtn.TextColor3 = Color3.fromRGB(220,220,220)
         catBtn.Text = categoryName
         catBtn.Font = Enum.Font.Gotham
         catBtn.TextSize = 10
-        catBtn.Parent = frame
+        catBtn.Parent = categoryButtonsFrame
         Instance.new("UICorner", catBtn).CornerRadius = UDim.new(0, 6)
 
         catBtn.Activated:Connect(function()
@@ -342,6 +348,9 @@ local function createMailGui()
 
     mailButton.Activated:Connect(function()
         frame.Visible = not frame.Visible
+        if frame.Visible then
+            syncInventory()
+        end
     end)
 
     -- confirmation modal
@@ -398,79 +407,84 @@ local function createMailGui()
             end
         end
 
-        local seen = {}
+        local inventoryMap = {}
+        local function addInventoryItem(name, quantity)
+            if not name or name == "" then return end
+            local qty = tonumber(quantity) or 1
+            inventoryMap[name] = (inventoryMap[name] or 0) + qty
+        end
+
+        local function getObjectName(v)
+            if v:IsA("StringValue") then
+                return v.Value or v.Name
+            end
+            if v:IsA("Folder") or v:IsA("Tool") or v:IsA("Model") then
+                return v.Name
+            end
+            if v:IsA("TextLabel") or v:IsA("TextButton") then
+                return v.Text
+            end
+            return v.Name
+        end
+
+        local function getObjectQuantity(v)
+            if v.GetAttribute then
+                local q = v:GetAttribute("Quantity") or v:GetAttribute("Amount") or v:GetAttribute("Count")
+                if tonumber(q) then return tonumber(q) end
+            end
+            if v:FindFirstChild("Quantity") and v.Quantity:IsA("IntValue") then
+                return v.Quantity.Value
+            end
+            if v:FindFirstChild("Amount") and v.Amount:IsA("IntValue") then
+                return v.Amount.Value
+            end
+            if v:FindFirstChild("Count") and v.Count:IsA("IntValue") then
+                return v.Count.Value
+            end
+            if v:IsA("IntValue") or v:IsA("NumberValue") then
+                return v.Value
+            end
+            return 1
+        end
+
         local added = 0
 
-        local function safeAdd(name, quantity)
-            if not name or seen[name] then return false end
-            seen[name] = true
-            addItem(name, name, quantity)
-            added = added + 1
-            return true
-        end
-
-        -- 1) Backpack (tools)
-        local backpack = LocalPlayer:FindFirstChild("Backpack")
-        if backpack then
-            for _, v in ipairs(backpack:GetChildren()) do
-                local qty = nil
-                if v.GetAttribute and v:GetAttribute("Quantity") then qty = v:GetAttribute("Quantity") end
-                if not qty and v:FindFirstChild("Quantity") and v.Quantity:IsA("IntValue") then qty = v.Quantity.Value end
-                safeAdd(v.Name, qty)
-            end
-        end
-
-        -- 2) Character (equipped tools)
-        local char = LocalPlayer.Character
-        if char then
-            for _, v in ipairs(char:GetChildren()) do
-                if v:IsA("Tool") then
-                    local qty = nil
-                    if v.GetAttribute and v:GetAttribute("Quantity") then qty = v:GetAttribute("Quantity") end
-                    safeAdd(v.Name, qty)
+        local function scanContainer(container)
+            if not container then return end
+            for _, v in ipairs(container:GetDescendants()) do
+                if v:IsA("Instance") then
+                    local name = getObjectName(v)
+                    local qty = getObjectQuantity(v)
+                    addInventoryItem(name, qty)
                 end
             end
         end
 
+        -- 1) Backpack (tools)
+        scanContainer(LocalPlayer:FindFirstChild("Backpack"))
+
+        -- 2) Character (equipped tools)
+        scanContainer(LocalPlayer.Character)
+
         -- 3) Common inventory containers on player
-        local inv = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("_Inventory") or LocalPlayer:FindFirstChild("Items")
-        if inv then
-            for _, v in ipairs(inv:GetChildren()) do
-                local qty = nil
-                if v.GetAttribute and v:GetAttribute("Quantity") then qty = v:GetAttribute("Quantity") end
-                if not qty and v:FindFirstChild("Amount") and v.Amount:IsA("IntValue") then qty = v.Amount.Value end
-                if not qty and v:FindFirstChild("Quantity") and v.Quantity:IsA("IntValue") then qty = v.Quantity.Value end
-                safeAdd(v.Name, qty)
-            end
-        end
+        scanContainer(LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("_Inventory") or LocalPlayer:FindFirstChild("Items"))
 
         -- 4) ReplicatedStorage / Server storage variants
-        local rs = game:GetService("ReplicatedStorage")
-        local rInv = rs:FindFirstChild("Inventory") or rs:FindFirstChild("Items") or rs:FindFirstChild("Shop")
-        if rInv then
-            for _, v in ipairs(rInv:GetChildren()) do
-                local qty = nil
-                if v.GetAttribute and v:GetAttribute("Quantity") then qty = v:GetAttribute("Quantity") end
-                if not qty and v:FindFirstChild("Amount") and v.Amount:IsA("IntValue") then qty = v.Amount.Value end
-                safeAdd(v.Name, qty)
-            end
-        end
+        scanContainer(game:GetService("ReplicatedStorage"):FindFirstChild("Inventory") or game:GetService("ReplicatedStorage"):FindFirstChild("Items") or game:GetService("ReplicatedStorage"):FindFirstChild("Shop"))
 
         -- 5) Workspace drops (optional)
-        local drops = workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("Drops")
-        if drops then
-            for _, v in ipairs(drops:GetChildren()) do
-                local qty = nil
-                if v.GetAttribute and v:GetAttribute("Quantity") then qty = v:GetAttribute("Quantity") end
-                safeAdd(v.Name, qty)
-            end
-        end
+        scanContainer(workspace:FindFirstChild("DroppedItems") or workspace:FindFirstChild("Drops"))
 
         -- 6) fallback sample
-        if added == 0 then
-            for i = 1, 6 do
-                safeAdd("Item" .. i, 1)
-            end
+        if next(inventoryMap) == nil then
+            inventoryMap["Item1"] = 1
+            inventoryMap["Item2"] = 1
+            inventoryMap["Item3"] = 1
+        end
+
+        for name, qty in pairs(inventoryMap) do
+            addItem(name, name, qty)
+            added = added + 1
         end
 
         -- resize canvas after UI update
