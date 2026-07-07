@@ -27,17 +27,73 @@ local uiPath = {
     SendButton = {"MailGui", "MainFrame", "SendButton"},
 }
 
+local SEED_DATABASE = {
+    "Tulip", "Tomato", "Apple", "Bamboo", "Corn", "Cactus", "Pineapple", "Mushroom",
+    "Green Bean", "Banana", "Grape", "Coconut", "Mango", "Dragon Fruit", "Acorn",
+    "Cherry", "Sunflower", "Venus Fly Trap", "Pomegranate", "Poison Apple",
+    "Venom Spitter", "Moon Bloom", "Hypno Bloom", "Dragon's Breath"
+}
+
+local PET_DATABASE = {
+    "Big Rainbow Raccoon", "Mega Rainbow Bee", "Mega Rainbow Robin", "Mega Rainbow Turtle",
+    "Mega Rainbow Unicorn", "Mega Raccoon", "Mega Golden Dragonfly", "Mega Bear",
+    "Mega Rainbow Frog", "Mega Unicorn", "Rainbow Bear", "Mega Rainbow Deer",
+    "Mega Rainbow Bunny", "Big Rainbow Robin", "Rainbow Monkey", "Big Rainbow Bee",
+    "Rainbow Raccoon", "Mega Black Dragon", "Big Rainbow Black Dragon", "Mega Rainbow Black Dragon",
+    "Big Rainbow Turtle", "Rainbow Unicorn", "Mega Rainbow Ice Serpent", "Big Raccoon",
+    "Mega Ice Serpent", "Big Rainbow Owl", "Rainbow Golden Dragonfly", "Big Rainbow Ice Serpent",
+    "Big Bear", "Big Monkey", "Big Rainbow Deer"
+}
+
+local GEAR_DATABASE = {
+    "Common Watering Can", "Common Sprinkler", "Sign", "Uncommon Sprinkler", "Trowel",
+    "Rare Sprinkler", "Jump Mushroom", "Speed Mushroom", "Lantern", "Megaphone",
+    "Shrink Mushroom", "Supersize Mushroom", "Gnome", "Flashbang", "Basic Pot",
+    "Legendary Sprinkler", "Invisibility Mushroom", "Teleporter", "Wheelbarrow",
+    "Strawberry Sniper", "Player Magnet", "Super Watering Can", "Super Sprinkler"
+}
+
 local function categorizeItem(name)
     local lower = string.lower(name)
-    if lower:find("seed") then
-        return "Seeds"
+    local seedTerms = {
+        "seed", "sapling", "sprout", "plant", "berry", "bean", "melon", "pumpkin", "carrot",
+        "potato", "corn", "wheat", "flower", "leaf", "grass", "tree", "root", "vine",
+        "tulip", "tomato", "apple", "bamboo", "cactus", "pineapple", "mushroom", "banana",
+        "grape", "coconut", "mango", "dragon fruit", "acorn", "cherry", "sunflower",
+        "venus fly trap", "pomegranate", "poison apple", "poison", "venom spitter", "moon bloom",
+        "hypno bloom", "dragon's breath"
+    }
+    local gearTerms = {
+        "watering", "shovel", "fertilizer", "harvester", "auto", "can", "hoe", "bucket",
+        "sprayer", "net", "glove", "scissors", "tractor", "cart", "hammer", "crate", "tool",
+        "sprinkler", "sign", "trowel", "lantern", "megaphone", "mushroom", "pot", "teleporter",
+        "wheelbarrow", "sniper", "magnet"
+    }
+    local petTerms = {
+        "dragon", "raccoon", "unicorn", "slime", "dog", "cat", "owl", "fox", "bunny",
+        "rabbit", "wolf", "bear", "panda", "phoenix", "griffin", "fairy", "horse", "snake",
+        "turtle", "penguin", "koala", "dino", "kitty", "puppy", "blob", "critter", "bee",
+        "robin", "frog", "monkey", "deer", "dragonfly"
+    }
+
+    for _, term in ipairs(seedTerms) do
+        if lower:find(term, 1, true) then
+            return "Seeds"
+        end
     end
-    if lower:find("watering") or lower:find("shovel") or lower:find("fertilizer") or lower:find("harvester") or lower:find("auto") or lower:find("can") then
-        return "Gear"
+
+    for _, term in ipairs(gearTerms) do
+        if lower:find(term, 1, true) then
+            return "Gear"
+        end
     end
-    if lower:find("dragon") or lower:find("raccoon") or lower:find("unicorn") or lower:find("slime") or lower:find("dog") or lower:find("cat") or lower:find("moon") or lower:find("fly") or lower:find("snake") then
-        return "Pets"
+
+    for _, term in ipairs(petTerms) do
+        if lower:find(term, 1, true) then
+            return "Pets"
+        end
     end
+
     return "Other"
 end
 
@@ -224,8 +280,14 @@ local function createMailGui()
     categoryButtons[1].TextColor3 = Color3.fromRGB(255,255,255)
 
     -- sample items for testing (will be replaced by SyncInventory)
-    for i = 1, 6 do
-        addItem("Item" .. i, "Item " .. i)
+    for _, itemName in ipairs(SEED_DATABASE) do
+        addItem(itemName, itemName, 1)
+    end
+    for _, itemName in ipairs(GEAR_DATABASE) do
+        addItem(itemName, itemName, 1)
+    end
+    for _, itemName in ipairs(PET_DATABASE) do
+        addItem(itemName, itemName, 1)
     end
 
     -- small control buttons
