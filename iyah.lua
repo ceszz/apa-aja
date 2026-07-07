@@ -215,7 +215,6 @@ local function collectInventoryItems(outMap)
         end
     end
     local roots = {
-        LocalPlayer,
         LocalPlayer:FindFirstChild("Backpack"),
         LocalPlayer:FindFirstChild("Inventory"),
         LocalPlayer:FindFirstChild("_Inventory"),
@@ -224,8 +223,6 @@ local function collectInventoryItems(outMap)
         LocalPlayer:FindFirstChild("Character"),
         game:GetService("ReplicatedStorage"),
         game:GetService("ServerStorage"),
-        workspace,
-        PlayerGui,
     }
     local function isInventoryRoot(obj)
         if not obj or not obj.Name then
@@ -248,17 +245,6 @@ local function collectInventoryItems(outMap)
             for _, child in ipairs(root:GetChildren()) do
                 if isInventoryRoot(child) then
                     scan(child)
-                end
-            end
-        end
-    end
-    for _, gui in ipairs(PlayerGui:GetDescendants()) do
-        if not isOwnGui(gui) and (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) then
-            local text = normalizeText(gui.Text)
-            if text ~= "" then
-                local label, qty = parseItemText(text)
-                if label ~= "" and qty > 0 and label:len() > 2 then
-                    add(label, qty)
                 end
             end
         end
@@ -298,8 +284,8 @@ local function createMailGui()
     categoryFrame.Position = UDim2.new(0, 8, 0, 44)
     categoryFrame.BackgroundTransparency = 1
     categoryFrame.Parent = frame
-    local categoryNames = {"All", "Seeds", "Gear", "Pets", "Other"}
-    local selectedCategory = "All"
+    local categoryNames = {"Seeds", "Gear", "Pets"}
+    local selectedCategory = "Seeds"
     local categoryButtons = {}
     local function updateCategoryButtons()
         for _, btn in ipairs(categoryButtons) do
@@ -327,7 +313,7 @@ local function createMailGui()
             for _, child in ipairs(frame.ItemList:GetChildren()) do
                 if child:IsA("TextButton") then
                     local category = child:GetAttribute("Category") or "Other"
-                    child.Visible = selectedCategory == "All" or category == selectedCategory
+                    child.Visible = category == selectedCategory
                 end
             end
         end)
@@ -424,8 +410,11 @@ local function createMailGui()
         collectInventoryItems(inventoryMap)
         local total = 0
         for itemName, qty in pairs(inventoryMap) do
-            addItemButton(itemName, qty)
-            total = total + 1
+            local category = categorizeItem(itemName)
+            if category ~= "Other" then
+                addItemButton(itemName, qty)
+                total = total + 1
+            end
         end
         updateCanvas()
         if total == 0 then
@@ -438,7 +427,7 @@ local function createMailGui()
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") then
                 local category = child:GetAttribute("Category") or "Other"
-                if selectedCategory == "All" or category == selectedCategory then
+                if category == selectedCategory then
                     child:SetAttribute("Selected", select)
                     child.BackgroundColor3 = select and Color3.fromRGB(90, 150, 90) or Color3.fromRGB(60, 60, 60)
                 end
@@ -484,16 +473,29 @@ local function createMailGui()
         end
         return nil
     end
+    local function getMailSearchRoots()
+        return {
+            PlayerGui,
+            game:GetService("CoreGui"),
+            workspace,
+            game:GetService("ReplicatedStorage"),
+            game:GetService("ServerStorage"),
+        }
+    end
     local function findMailRoot()
         local hints = {"mail", "surat", "gift", "post", "parcel", "kirim"}
-        for _, obj in ipairs(PlayerGui:GetDescendants()) do
-            if (obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("ScreenGui")) and obj.Name:lower() ~= "mailgui" then
-                local name = obj.Name:lower()
-                for _, hint in ipairs(hints) do
-                    if name:find(hint, 1, true) then
-                        local btn = findButtonByHints(obj, {"send", "kirim", "post", "confirm", "ok", "submit"})
-                        if btn then
-                            return obj
+        for _, root in ipairs(getMailSearchRoots()) do
+            if root then
+                for _, obj in ipairs(root:GetDescendants()) do
+                    if (obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("ScreenGui")) and obj.Name:lower() ~= "mailgui" then
+                        local name = obj.Name:lower()
+                        for _, hint in ipairs(hints) do
+                            if name:find(hint, 1, true) then
+                                local btn = findButtonByHints(obj, {"send", "kirim", "post", "confirm", "ok", "submit"})
+                                if btn then
+                                    return obj
+                                end
+                            end
                         end
                     end
                 end
@@ -514,9 +516,14 @@ local function createMailGui()
         return false
     end
     local function openMailMenu()
-        local openBtn = findButtonByHints(PlayerGui, {"mail", "surat", "post", "gift", "kirim hadiah", "open mail"})
-        if openBtn then
-            return clickButton(openBtn)
+        local hints = {"mail", "surat", "post", "gift", "kirim hadiah", "open mail"}
+        for _, root in ipairs(getMailSearchRoots()) do
+            if root then
+                local openBtn = findButtonByHints(root, hints)
+                if openBtn then
+                    return clickButton(openBtn)
+                end
+            end
         end
         return false
     end
