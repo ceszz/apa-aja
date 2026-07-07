@@ -21,7 +21,7 @@ local settings = {
 }
 
 local uiPath = {
-    MailButton = {"MailGui", "MainFrame"},
+    MailButton = {"MailGui", "MailButton"},
     UsernameBox = {"MailGui", "MainFrame", "UsernameBox"},
     ItemList = {"MailGui", "MainFrame", "ItemList"},
     SendButton = {"MailGui", "MainFrame", "SendButton"},
@@ -56,6 +56,8 @@ local function createMailGui()
     frame.Position = UDim2.new(0.5, -170, 0.12, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
     frame.Visible = false
     frame.Parent = screen
 
@@ -92,17 +94,6 @@ local function createMailGui()
     quantityBox.ClearTextOnFocus = false
     quantityBox.Parent = frame
 
-    local categoryLabel = Instance.new("TextLabel")
-    categoryLabel.Name = "CategoryLabel"
-    categoryLabel.Size = UDim2.new(0.9, 0, 0, 20)
-    categoryLabel.Position = UDim2.new(0.05, 0, 0, 112)
-    categoryLabel.BackgroundTransparency = 1
-    categoryLabel.Text = "Filter kategori:"
-    categoryLabel.TextColor3 = Color3.fromRGB(200,200,200)
-    categoryLabel.Font = Enum.Font.Gotham
-    categoryLabel.TextSize = 12
-    categoryLabel.TextXAlignment = Enum.TextXAlignment.Left
-    categoryLabel.Parent = frame
 
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
@@ -130,13 +121,25 @@ local function createMailGui()
     uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
     uiLayout.Padding = UDim.new(0, 6)
 
-    local currentCategory = "All"
-    local categories = {"All", "Seeds", "Gear", "Pets", "Other"}
+    local selectedCategory = "All"
+    local categoryNames = {"All", "Seeds", "Gear", "Pets", "Other"}
+
+    local function updateSelectedStats()
+        local selectedCount, totalQty = 0, 0
+        for _, child in ipairs(itemList:GetChildren()) do
+            if child:IsA("TextButton") and child:GetAttribute("Selected") then
+                selectedCount = selectedCount + 1
+                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
+            end
+        end
+        selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
+    end
+
     local function updateItemVisibility()
         for _, itemButton in ipairs(itemList:GetChildren()) do
             if itemButton:IsA("TextButton") then
                 local category = itemButton:GetAttribute("Category") or "Other"
-                itemButton.Visible = (currentCategory == "All") or (category == currentCategory)
+                itemButton.Visible = (selectedCategory == "All") or (category == selectedCategory)
             end
         end
     end
@@ -174,41 +177,44 @@ local function createMailGui()
             else
                 b.BackgroundColor3 = Color3.fromRGB(60,60,60)
             end
-            if selectedLabel then
-                local selectedCount = 0
-                local totalQty = 0
-                for _, child in ipairs(itemList:GetChildren()) do
-                    if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                        selectedCount = selectedCount + 1
-                        local qty = tonumber(child:GetAttribute("Quantity")) or 1
-                        totalQty = totalQty + qty
-                    end
-                end
-                selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
-            end
+            updateSelectedStats()
         end)
         return b
     end
 
+    local function selectCategoryItems(category, selected)
+        for _, child in ipairs(itemList:GetChildren()) do
+            if child:IsA("TextButton") then
+                local cat = child:GetAttribute("Category") or "Other"
+                if category == "All" or cat == category then
+                    child:SetAttribute("Selected", selected)
+                    child.BackgroundColor3 = selected and Color3.fromRGB(80,140,80) or Color3.fromRGB(60,60,60)
+                end
+            end
+        end
+        updateSelectedStats()
+    end
+
     local categoryButtons = {}
-    for index, categoryName in ipairs(categories) do
+    for index, categoryName in ipairs(categoryNames) do
         local catBtn = Instance.new("TextButton")
-        catBtn.Name = categoryName .. "Button"
-        catBtn.Size = UDim2.new(0, 60, 0, 24)
-        catBtn.Position = UDim2.new(0, 10 + ((index - 1) * 66), 0, 34)
+        catBtn.Name = categoryName .. "FilterBtn"
+        catBtn.Size = UDim2.new(0, 64, 0, 24)
+        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.18), 0, 0, 134)
         catBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
         catBtn.TextColor3 = Color3.fromRGB(220,220,220)
         catBtn.Text = categoryName
         catBtn.Font = Enum.Font.Gotham
-        catBtn.TextSize = 12
+        catBtn.TextSize = 11
         catBtn.Parent = frame
         Instance.new("UICorner", catBtn).CornerRadius = UDim.new(0, 6)
 
         catBtn.Activated:Connect(function()
-            currentCategory = categoryName
+            selectedCategory = categoryName
             updateItemVisibility()
             for _, otherBtn in ipairs(categoryButtons) do
-                otherBtn.BackgroundColor3 = (otherBtn == catBtn) and Color3.fromRGB(78, 132, 173) or Color3.fromRGB(45,45,50)
+                otherBtn.BackgroundColor3 = (otherBtn == catBtn) and Color3.fromRGB(78,132,173) or Color3.fromRGB(45,45,50)
+                otherBtn.TextColor3 = (otherBtn == catBtn) and Color3.fromRGB(255,255,255) or Color3.fromRGB(220,220,220)
             end
         end)
         table.insert(categoryButtons, catBtn)
@@ -225,40 +231,99 @@ local function createMailGui()
     -- small control buttons
     local selectAll = Instance.new("TextButton")
     selectAll.Name = "SelectAll"
-    selectAll.Size = UDim2.new(0.2, 0, 0, 28)
-    selectAll.Position = UDim2.new(0.05, 0, 0.86, 0)
+    selectAll.Size = UDim2.new(0.18, 0, 0, 28)
+    selectAll.Position = UDim2.new(0.05, 0, 0.78, 0)
     selectAll.Text = "Select All"
+    selectAll.BackgroundColor3 = Color3.fromRGB(55,55,60)
+    selectAll.TextColor3 = Color3.fromRGB(240,240,240)
+    selectAll.Font = Enum.Font.Gotham
+    selectAll.TextSize = 12
     selectAll.Parent = frame
+    Instance.new("UICorner", selectAll).CornerRadius = UDim.new(0, 6)
+
+    local selectSeeds = Instance.new("TextButton")
+    selectSeeds.Name = "SelectSeeds"
+    selectSeeds.Size = UDim2.new(0.18, 0, 0, 28)
+    selectSeeds.Position = UDim2.new(0.26, 0, 0.78, 0)
+    selectSeeds.Text = "Select Seeds"
+    selectSeeds.BackgroundColor3 = Color3.fromRGB(55,55,60)
+    selectSeeds.TextColor3 = Color3.fromRGB(240,240,240)
+    selectSeeds.Font = Enum.Font.Gotham
+    selectSeeds.TextSize = 12
+    selectSeeds.Parent = frame
+    Instance.new("UICorner", selectSeeds).CornerRadius = UDim.new(0, 6)
+
+    local selectGear = Instance.new("TextButton")
+    selectGear.Name = "SelectGear"
+    selectGear.Size = UDim2.new(0.18, 0, 0, 28)
+    selectGear.Position = UDim2.new(0.47, 0, 0.78, 0)
+    selectGear.Text = "Select Gear"
+    selectGear.BackgroundColor3 = Color3.fromRGB(55,55,60)
+    selectGear.TextColor3 = Color3.fromRGB(240,240,240)
+    selectGear.Font = Enum.Font.Gotham
+    selectGear.TextSize = 12
+    selectGear.Parent = frame
+    Instance.new("UICorner", selectGear).CornerRadius = UDim.new(0, 6)
+
+    local selectPets = Instance.new("TextButton")
+    selectPets.Name = "SelectPets"
+    selectPets.Size = UDim2.new(0.18, 0, 0, 28)
+    selectPets.Position = UDim2.new(0.68, 0, 0.78, 0)
+    selectPets.Text = "Select Pets"
+    selectPets.BackgroundColor3 = Color3.fromRGB(55,55,60)
+    selectPets.TextColor3 = Color3.fromRGB(240,240,240)
+    selectPets.Font = Enum.Font.Gotham
+    selectPets.TextSize = 12
+    selectPets.Parent = frame
+    Instance.new("UICorner", selectPets).CornerRadius = UDim.new(0, 6)
 
     local clearSel = Instance.new("TextButton")
     clearSel.Name = "ClearSelection"
-    clearSel.Size = UDim2.new(0.2, 0, 0, 28)
-    clearSel.Position = UDim2.new(0.27, 0, 0.86, 0)
+    clearSel.Size = UDim2.new(0.18, 0, 0, 28)
+    clearSel.Position = UDim2.new(0.05, 0, 0.86, 0)
     clearSel.Text = "Clear"
+    clearSel.BackgroundColor3 = Color3.fromRGB(55,55,60)
+    clearSel.TextColor3 = Color3.fromRGB(240,240,240)
+    clearSel.Font = Enum.Font.Gotham
+    clearSel.TextSize = 12
     clearSel.Parent = frame
-
-    local autoBtn = Instance.new("TextButton")
-    autoBtn.Name = "AutoGiftButton"
-    autoBtn.Size = UDim2.new(0.2, 0, 0, 28)
-    autoBtn.Position = UDim2.new(0.49, 0, 0.86, 0)
-    autoBtn.Text = "Auto Gift"
-    autoBtn.BackgroundColor3 = Color3.fromRGB(90, 135, 90)
-    autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
-    autoBtn.Parent = frame
+    Instance.new("UICorner", clearSel).CornerRadius = UDim.new(0, 6)
 
     local send = Instance.new("TextButton")
     send.Name = "SendButton"
-    send.Size = UDim2.new(0.2, 0, 0, 28)
-    send.Position = UDim2.new(0.71, 0, 0.86, 0)
-    send.Text = "Send"
+    send.Size = UDim2.new(0.45, 0, 0, 28)
+    send.Position = UDim2.new(0.05, 0, 0.93, 0)
+    send.Text = "Send Gift"
+    send.BackgroundColor3 = Color3.fromRGB(60,120,180)
+    send.TextColor3 = Color3.fromRGB(240,240,240)
+    send.Font = Enum.Font.Gotham
+    send.TextSize = 12
     send.Parent = frame
+    Instance.new("UICorner", send).CornerRadius = UDim.new(0, 6)
+
+    local autoBtn = Instance.new("TextButton")
+    autoBtn.Name = "AutoGiftButton"
+    autoBtn.Size = UDim2.new(0.45, 0, 0, 28)
+    autoBtn.Position = UDim2.new(0.5, 0, 0.93, 0)
+    autoBtn.Text = "Auto Gift OFF"
+    autoBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
+    autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
+    autoBtn.Font = Enum.Font.Gotham
+    autoBtn.TextSize = 12
+    autoBtn.Parent = frame
+    Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 6)
 
     local syncBtn = Instance.new("TextButton")
     syncBtn.Name = "SyncInventory"
     syncBtn.Size = UDim2.new(0.9, 0, 0, 28)
-    syncBtn.Position = UDim2.new(0.05, 0, 0.93, 0)
+    syncBtn.Position = UDim2.new(0.05, 0, 0.71, 0)
     syncBtn.Text = "Sync Inventory"
+    syncBtn.BackgroundColor3 = Color3.fromRGB(90,90,95)
+    syncBtn.TextColor3 = Color3.fromRGB(240,240,240)
+    syncBtn.Font = Enum.Font.Gotham
+    syncBtn.TextSize = 12
     syncBtn.Parent = frame
+    Instance.new("UICorner", syncBtn).CornerRadius = UDim.new(0, 6)
 
     local mailButton = Instance.new("TextButton")
     mailButton.Name = "MailButton"
@@ -308,26 +373,23 @@ local function createMailGui()
     cancelBtn.Parent = confirmFrame
 
     selectAll.Activated:Connect(function()
-        local selectedCount, totalQty = 0, 0
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") then
-                child:SetAttribute("Selected", true)
-                child.BackgroundColor3 = Color3.fromRGB(80,140,80)
-                selectedCount = selectedCount + 1
-                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
-            end
-        end
-        selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
+        selectCategoryItems("All", true)
+    end)
+
+    selectSeeds.Activated:Connect(function()
+        selectCategoryItems("Seeds", true)
+    end)
+
+    selectGear.Activated:Connect(function()
+        selectCategoryItems("Gear", true)
+    end)
+
+    selectPets.Activated:Connect(function()
+        selectCategoryItems("Pets", true)
     end)
 
     clearSel.Activated:Connect(function()
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") then
-                child:SetAttribute("Selected", false)
-                child.BackgroundColor3 = Color3.fromRGB(60,60,60)
-            end
-        end
-        selectedLabel.Text = "Selected items: 0 | Qty: 0"
+        selectCategoryItems("All", false)
     end)
 
     -- sync inventory: try common locations (Backpack, Character, Inventory, ReplicatedStorage)
@@ -425,50 +487,75 @@ local function createMailGui()
         end)
     end
 
+    local autoGiftEnabled = false
+    local autoGiftRunning = false
+
+    local function updateAutoButton()
+        autoBtn.Text = autoGiftEnabled and "Auto Gift ON" or "Auto Gift OFF"
+        autoBtn.BackgroundColor3 = autoGiftEnabled and Color3.fromRGB(90, 135, 90) or Color3.fromRGB(180, 80, 80)
+    end
+
+    local function getSelectedItems()
+        local selectedItems = {}
+        for _, child in ipairs(itemList:GetChildren()) do
+            if child:IsA("TextButton") and child:GetAttribute("Selected") then
+                table.insert(selectedItems, {
+                    name = child.Name,
+                    qty = tonumber(child:GetAttribute("Quantity")) or 1,
+                    category = child:GetAttribute("Category") or "Other"
+                })
+            end
+        end
+        return selectedItems
+    end
+
+    local function autoGiftLoop()
+        if autoGiftRunning then return end
+        autoGiftRunning = true
+        spawn(function()
+            while autoGiftEnabled do
+                local recip = usernameBox.Text
+                local targetCount = tonumber(quantityBox.Text) or 1
+                local selectedItems = getSelectedItems()
+                if recip ~= "" and #selectedItems > 0 then
+                    local totalQty = 0
+                    for _, item in ipairs(selectedItems) do
+                        totalQty = totalQty + item.qty
+                    end
+                    local sendCount = math.min(targetCount, totalQty)
+                    if sendCount > 0 then
+                        PlayerStatus("Auto Gift loop sending " .. tostring(sendCount) .. " items to " .. tostring(recip))
+                        AutoGiftMail(recip, sendCount)
+                    end
+                end
+                wait(3)
+            end
+            autoGiftRunning = false
+        end)
+    end
+
     syncBtn.Activated:Connect(function()
         syncInventory()
     end)
 
     autoBtn.Activated:Connect(function()
-        local recip = usernameBox.Text
-        local targetCount = tonumber(quantityBox.Text) or 1
-        if recip == "" then
-            PlayerStatus("Masukkan username penerima terlebih dahulu")
-            return
+        autoGiftEnabled = not autoGiftEnabled
+        updateAutoButton()
+        if autoGiftEnabled then
+            autoGiftLoop()
         end
-        if targetCount <= 0 then
-            PlayerStatus("Jumlah item harus lebih besar dari 0")
-            return
-        end
-
-        local selectedCount = 0
-        local totalQty = 0
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                selectedCount = selectedCount + 1
-                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
-            end
-        end
-        if selectedCount == 0 then
-            PlayerStatus("Tidak ada item terpilih untuk auto gift")
-            return
-        end
-
-        local sendCount = math.min(targetCount, totalQty)
-        PlayerStatus("Auto Gift started: " .. tostring(recip) .. " | Selected: " .. tostring(selectedCount) .. " | Send Qty: " .. tostring(sendCount))
-        AutoGiftMail(recip, sendCount)
     end)
 
     send.Activated:Connect(function()
         local recip = usernameBox.Text
-        local selectedList = {}
+        if recip == "" then
+            PlayerStatus("Masukkan username penerima terlebih dahulu")
+            return
+        end
+        local selectedList = getSelectedItems()
         local totalQty = 0
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                local qty = tonumber(child:GetAttribute("Quantity")) or 1
-                totalQty = totalQty + qty
-                table.insert(selectedList, {name = child.Name, qty = qty})
-            end
+        for _, it in ipairs(selectedList) do
+            totalQty = totalQty + it.qty
         end
         if #selectedList == 0 then
             PlayerStatus("No items selected")
