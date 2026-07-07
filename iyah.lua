@@ -5,13 +5,331 @@
 ---@diagnostic disable: undefined-global
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local SharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+local ClientModules = ReplicatedStorage:FindFirstChild("ClientModules")
+
+local Networking
+local PlayerStateClient
+local MailboxItemCatalog
+
+local function safeRequire(module)
+    if not module then
+        return nil
+    end
+    local ok, result = pcall(require, module)
+    if ok then
+        return result
+    end
+    return nil
+end
+
+local function findMailboxItemCatalogModule()
+    local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local controllers = playerScripts and playerScripts:FindFirstChild("Controllers")
+    local mailboxController = controllers and controllers:FindFirstChild("MailboxController")
+    local officialModule = mailboxController and mailboxController:FindFirstChild("MailboxItemCatalog")
+
+    if officialModule and officialModule:IsA("ModuleScript") then
+        return officialModule
+    end
+
+    local replicatedFallback = ReplicatedStorage:FindFirstChild("MailboxItemCatalog", true)
+    if replicatedFallback and replicatedFallback:IsA("ModuleScript") then
+        return replicatedFallback
+    end
+
+    return nil
+end
+
+local function loadNetworkingModules()
+    if SharedModules then
+        Networking = safeRequire(SharedModules:FindFirstChild("Networking"))
+    end
+    if ClientModules then
+        PlayerStateClient = safeRequire(ClientModules:FindFirstChild("PlayerStateClient"))
+    end
+    local catalogModule = findMailboxItemCatalogModule()
+    if catalogModule then
+        MailboxItemCatalog = safeRequire(catalogModule)
+    end
+end
+
+local function normalizeUsername(value)
+    local username = tostring(value or "")
+    username = username:gsub("^%s*@?(.-)%s*$", "%1")
+    return username
+end
+
+local function lookupRecipient(username)
+    username = normalizeUsername(username)
+    if username == "" then
+        return nil
+    end
+
+    if Networking and Networking.Mailbox and Networking.Mailbox.LookupPlayer then
+        local ok, result = pcall(function()
+            return Networking.Mailbox.LookupPlayer:Fire(username)
+        end)
+        if ok and typeof(result) == "number" and result > 0 then
+            return result
+        end
+    end
+
+    local ok, userId = pcall(function()
+        return Players:GetUserIdFromNameAsync(username)
+    end)
+    if ok and type(userId) == "number" and userId > 0 then
+        return userId
+    end
+
+    return nil
+end
+
+local function getLocalInventory()
+    if not PlayerStateClient or type(PlayerStateClient.GetLocalReplica) ~= "function" then
+        return nil
+    end
+    local ok, replica = pcall(function()
+        return PlayerStateClient:GetLocalReplica()
+    end)
+    if not ok or type(replica) ~= "table" then
+        return nil
+    end
+    local data = replica.Data
+    if type(data) ~= "table" or type(data.Inventory) ~= "table" then
+        return nil
+    end
+    return data.Inventory
+end
+
+local function getEquippedPetIds()
+    local equipped = {}
+    if not Networking or not Networking.Pets or not Networking.Pets.GetEquippedPets then
+        return equipped
+    end
+    local ok, result = pcall(function()
+        return Networking.Pets.GetEquippedPets:Fire()
+    end)
+    if ok and type(result) == "table" then
+        for _, pet in pairs(result) do
+            if type(pet) == "table" and pet.Id ~= nil then
+                equipped[tostring(pet.Id)] = true
+            end
+        end
+    end
+    return equipped
+end
+
+local GEAR_CATEGORIES = {
+    Sprinklers = true,
+    WateringCans = true,
+    Mushrooms = true,
+    Gnomes = true,
+    Raccoons = true,
+    Crates = true,
+    Trowels = true,
+    Props = true,
+}
+
+local function mapInventoryCategoryToUiCategory(category)
+    local name = tostring(category or "")
+    if name == "Pets" then
+        return "Pets"
+    end
+    if name == "Seeds" or name == "SeedPacks" or name:lower():find("seed") then
+        return "Seeds"
+    end
+    if GEAR_CATEGORIES[name] or name:lower():find("sprinkler") or name:lower():find("watering") or name:lower():find("mushroom") or name:lower():find("gnome") or name:lower():find("raccoon") or name:lower():find("crate") or name:lower():find("trowel") or name:lower():find("prop") then
+        return "Gear"
+    end
+    return nil
+end
+
+local function resolveDisplayName(category, itemKey, entry)
+    if MailboxItemCatalog and type(MailboxItemCatalog.Resolve) == "function" then
+        local ok, displayName = pcall(MailboxItemCatalog.Resolve, category, itemKey, entry)
+        if ok and type(displayName) == "string" and displayName ~= "" then
+            return displayName
+        end
+    end
+    if category == "Seeds" then
+        local name = tostring(itemKey)
+        local lower = name:lower()
+        if lower:sub(-5) ~= " seed" and lower ~= "seed" then
+            return name .. " Seed"
+        end
+        return name
+    end
+    if category == "Pets" then
+        if type(entry) == "table" then
+            return tostring(entry.Name or entry.PetName or entry.Species or itemKey)
+        end
+        return tostring(itemKey)
+    end
+    return tostring(itemKey)
+end
+
+local function isGiftableInventoryEntry(category, itemKey, value, equippedPetIds)
+    if MailboxItemCatalog and type(MailboxItemCatalog.IsGiftable) == "function" then
+        local ok, allowed = pcall(MailboxItemCatalog.IsGiftable, category)
+        if not ok or allowed ~= true then
+            return false
+        end
+    end
+    if category == "Pets" then
+        if type(value) ~= "table" or value.Id == nil then
+            return false
+        end
+        if value.Equipped == true or equippedPetIds[tostring(value.Id)] or equippedPetIds[tostring(itemKey)] then
+            return false
+        end
+        return true
+    end
+    return type(value) == "number" and value > 0
+end
+
+local function collectReplicaInventoryEntries()
+    local inventory = getLocalInventory()
+    if type(inventory) ~= "table" then
+        return {}
+    end
+    local equippedPetIds = getEquippedPetIds()
+    local entries = {}
+    for invCategory, categoryInventory in pairs(inventory) do
+        local uiCategory = mapInventoryCategoryToUiCategory(invCategory)
+        if uiCategory and type(categoryInventory) == "table" then
+            if invCategory == "Pets" then
+                local grouped = {}
+                for itemKey, value in pairs(categoryInventory) do
+                    if isGiftableInventoryEntry(invCategory, itemKey, value, equippedPetIds) then
+                        local displayName = resolveDisplayName(invCategory, itemKey, value)
+                        local selectionKey = uiCategory .. ":GROUP:" .. displayName
+                        local entry = grouped[selectionKey]
+                        if not entry then
+                            entry = {
+                                InventoryCategory = invCategory,
+                                Category = uiCategory,
+                                ItemKey = itemKey,
+                                DisplayName = displayName,
+                                Owned = 0,
+                                GroupedPets = true,
+                                Members = {},
+                                SelectionKey = selectionKey,
+                            }
+                            grouped[selectionKey] = entry
+                        end
+                        entry.Owned = entry.Owned + 1
+                        table.insert(entry.Members, { ItemKey = itemKey, EntryValue = value })
+                    end
+                end
+                for _, entry in pairs(grouped) do
+                    table.sort(entry.Members, function(a, b)
+                        return tostring(a.ItemKey) < tostring(b.ItemKey)
+                    end)
+                    table.insert(entries, entry)
+                end
+            else
+                for itemKey, value in pairs(categoryInventory) do
+                    if isGiftableInventoryEntry(invCategory, itemKey, value, equippedPetIds) then
+                        local amount = math.max(1, math.floor(value))
+                        local displayName = resolveDisplayName(invCategory, itemKey, value)
+                        table.insert(entries, {
+                            InventoryCategory = invCategory,
+                            Category = uiCategory,
+                            ItemKey = itemKey,
+                            DisplayName = displayName,
+                            Owned = amount,
+                            GroupedPets = false,
+                            Unique = false,
+                            SelectionKey = uiCategory .. ":" .. tostring(itemKey),
+                        })
+                    end
+                end
+            end
+        end
+    end
+    table.sort(entries, function(a, b)
+        local aName = a.DisplayName:lower()
+        local bName = b.DisplayName:lower()
+        if aName ~= bName then
+            return aName < bName
+        end
+        return tostring(a.ItemKey) < tostring(b.ItemKey)
+    end)
+    return entries
+end
+
+local function buildPayloadFromSelection(selectedItems, maxQty)
+    local payload = {}
+    local sent = 0
+    for _, item in ipairs(selectedItems) do
+        if sent >= maxQty then break end
+        local count = math.min(item.qty or 1, maxQty - sent)
+        local category = item.inventoryCategory or item.category
+        local itemKey = item.key or item.name
+        if category == "Pets" then
+            for i = 1, count do
+                if sent >= maxQty then break end
+                table.insert(payload, { Category = category, ItemKey = itemKey, Count = 1 })
+                sent = sent + 1
+            end
+        else
+            table.insert(payload, { Category = category, ItemKey = itemKey, Count = count })
+            sent = sent + count
+        end
+    end
+    return payload, sent
+end
+
+local lastSendAt = 0
+local function sendBatch(userId, payload, note)
+    if not Networking or not Networking.Mailbox or not Networking.Mailbox.SendBatch then
+        return false, "Networking.Mailbox.SendBatch not found"
+    end
+
+    local elapsed = os.clock() - lastSendAt
+    if elapsed < 1.55 then
+        task.wait(1.55 - elapsed)
+    end
+    lastSendAt = os.clock()
+
+    local safeNote = tostring(note or "")
+    local noteLength = utf8.len(safeNote)
+    if noteLength and noteLength > 100 then
+        local cut = utf8.offset(safeNote, 101)
+        if cut then
+            safeNote = string.sub(safeNote, 1, cut - 1)
+        end
+    end
+
+    local ok, result, message = pcall(function()
+        return Networking.Mailbox.SendBatch:Fire(userId, payload, safeNote)
+    end)
+
+    if not ok then
+        return false, "Remote error: " .. tostring(result)
+    end
+
+    if result == true then
+        local text = tostring(message or "")
+        return true, text ~= "" and text or "Gift sent"
+    end
+
+    local text = tostring(message or "")
+    return false, text ~= "" and text or "Server rejected the gift"
+end
+
+loadNetworkingModules()
 
 local settings = {
     AutoMail = {
         username = "Ceszganteng",
         itemcount = 20,
+        note = "",
     },
 }
 
@@ -185,20 +503,38 @@ local function extractName(instance)
     return normalizeText(instance.Name)
 end
 
+local function extractItemKey(instance)
+    if not instance then
+        return ""
+    end
+    local key = safeGetAttribute(instance, "ItemKey") or safeGetAttribute(instance, "Key") or safeGetAttribute(instance, "Name")
+    if key and key ~= "" then
+        return normalizeText(key)
+    end
+    if instance:IsA("ObjectValue") and instance.Value then
+        return normalizeText(instance.Value.Name)
+    end
+    return normalizeText(instance.Name)
+end
+
 local function isOwnGui(instance)
     local mailGui = PlayerGui:FindFirstChild("MailGui")
     return mailGui and instance and instance:IsDescendantOf(mailGui)
 end
 
-local function collectInventoryItems(outMap)
+local function collectInventoryItems(outMap, keyMap)
+    keyMap = keyMap or {}
     local seen = {}
-    local function add(name, qty)
+    local function add(name, qty, key)
         name = normalizeText(name)
         if name == "" then
             return
         end
         name = findKnownItemName(name)
         outMap[name] = (outMap[name] or 0) + (tonumber(qty) or 1)
+        if key and key ~= "" and not keyMap[name] then
+            keyMap[name] = key
+        end
     end
     local function scan(obj)
         if not obj or seen[obj] or isOwnGui(obj) then
@@ -207,8 +543,9 @@ local function collectInventoryItems(outMap)
         seen[obj] = true
         local name = extractName(obj)
         local qty = extractQuantity(obj)
+        local key = extractItemKey(obj)
         if name ~= "" and name:len() > 1 then
-            add(name, qty)
+            add(name, qty, key)
         end
         for _, child in ipairs(obj:GetChildren()) do
             scan(child)
@@ -379,7 +716,7 @@ local function createMailGui()
         label = label .. " [" .. tostring(category) .. "]"
         return label
     end
-    local function addItemButton(itemName, qty)
+    local function addItemButton(itemName, qty, itemKey, inventoryCategory)
         local category = categorizeItem(itemName)
         local btn = Instance.new("TextButton")
         btn.Name = itemName:gsub("%s+", "_")
@@ -393,6 +730,9 @@ local function createMailGui()
         btn.Parent = itemList
         btn:SetAttribute("Selected", false)
         btn:SetAttribute("Category", category)
+        btn:SetAttribute("InventoryCategory", inventoryCategory or category)
+        btn:SetAttribute("ItemKey", itemKey or itemName)
+        btn:SetAttribute("DisplayName", itemName)
         btn:SetAttribute("Quantity", qty)
         btn.Activated:Connect(function()
             local selected = not btn:GetAttribute("Selected")
@@ -406,14 +746,23 @@ local function createMailGui()
                 child:Destroy()
             end
         end
-        local inventoryMap = {}
-        collectInventoryItems(inventoryMap)
         local total = 0
-        for itemName, qty in pairs(inventoryMap) do
-            local category = categorizeItem(itemName)
-            if category ~= "Other" then
-                addItemButton(itemName, qty)
+        local entries = collectReplicaInventoryEntries()
+        if #entries > 0 then
+            for _, entry in ipairs(entries) do
+                addItemButton(entry.DisplayName, entry.Owned, entry.ItemKey, entry.InventoryCategory)
                 total = total + 1
+            end
+        else
+            local inventoryMap = {}
+            local keyMap = {}
+            collectInventoryItems(inventoryMap, keyMap)
+            for itemName, qty in pairs(inventoryMap) do
+                local category = categorizeItem(itemName)
+                if category ~= "Other" then
+                    addItemButton(itemName, qty, keyMap[itemName] or itemName)
+                    total = total + 1
+                end
             end
         end
         updateCanvas()
@@ -439,172 +788,53 @@ local function createMailGui()
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") and child:GetAttribute("Selected") then
                 table.insert(selected, {
-                    name = extractName(child),
+                    name = child:GetAttribute("DisplayName") or extractName(child),
+                    key = child:GetAttribute("ItemKey") or extractName(child),
+                    category = child:GetAttribute("Category") or categorizeItem(child:GetAttribute("DisplayName") or extractName(child)),
+                    inventoryCategory = child:GetAttribute("InventoryCategory") or child:GetAttribute("Category"),
                     qty = tonumber(child:GetAttribute("Quantity")) or 1,
                 })
             end
         end
         return selected
     end
-    local function findButtonByHints(root, hints)
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-                local label = normalizeText(obj.Text):lower()
-                local name = obj.Name:lower()
-                for _, hint in ipairs(hints) do
-                    if label:find(hint, 1, true) or name:find(hint, 1, true) then
-                        return obj
-                    end
-                end
-            end
-        end
-        return nil
-    end
-    local function findTextBoxByHints(root, hints)
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("TextBox") then
-                local searchText = normalizeText((obj.PlaceholderText or "") .. " " .. obj.Name .. " " .. (obj.Text or "")):lower()
-                for _, hint in ipairs(hints) do
-                    if searchText:find(hint, 1, true) then
-                        return obj
-                    end
-                end
-            end
-        end
-        return nil
-    end
-    local function getMailSearchRoots()
-        return {
-            PlayerGui,
-            game:GetService("CoreGui"),
-            workspace,
-            game:GetService("ReplicatedStorage"),
-            game:GetService("ServerStorage"),
-        }
-    end
-    local function findMailRoot()
-        local hints = {"mail", "surat", "gift", "post", "parcel", "kirim"}
-        for _, root in ipairs(getMailSearchRoots()) do
-            if root then
-                for _, obj in ipairs(root:GetDescendants()) do
-                    if (obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("ScreenGui")) and obj.Name:lower() ~= "mailgui" then
-                        local name = obj.Name:lower()
-                        for _, hint in ipairs(hints) do
-                            if name:find(hint, 1, true) then
-                                local btn = findButtonByHints(obj, {"send", "kirim", "post", "confirm", "ok", "submit"})
-                                if btn then
-                                    return obj
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        return nil
-    end
-    local function clickButton(button)
-        if not button then
-            return false
-        end
-        if button:IsA("TextButton") or button:IsA("ImageButton") then
-            pcall(function()
-                button:Activate()
-            end)
-            return true
-        end
-        return false
-    end
-    local function openMailMenu()
-        local hints = {"mail", "surat", "post", "gift", "kirim hadiah", "open mail"}
-        for _, root in ipairs(getMailSearchRoots()) do
-            if root then
-                local openBtn = findButtonByHints(root, hints)
-                if openBtn then
-                    return clickButton(openBtn)
-                end
-            end
-        end
-        return false
-    end
-    local function typeMailUsername(value)
-        local root = findMailRoot() or PlayerGui
-        local box = findTextBoxByHints(root, {"username", "recipient", "player", "to", "penerima", "nama"})
-        if not box then
-            return false
-        end
-        box.Text = tostring(value)
-        pcall(function()
-            box:ReleaseFocus()
-        end)
-        return true
-    end
-    local function clickMailItem(itemName)
-        local root = findMailRoot() or PlayerGui
-        local lowerName = itemName:lower()
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-                local label = normalizeText(obj.Text ~= "" and obj.Text or obj.Name):lower()
-                if label:find(lowerName, 1, true) then
-                    if clickButton(obj) then
-                        return true
-                    end
-                end
-            end
-        end
-        return false
-    end
-    local function clickSendMailButton()
-        local root = findMailRoot() or PlayerGui
-        local btn = findButtonByHints(root, {"send", "kirim", "post", "submit", "ok", "confirm"})
-        if btn then
-            return clickButton(btn)
-        end
-        return false
-    end
     local function sendByMail(recipient, maxQty)
-        setStatus("Mencari menu mail...")
-        if not openMailMenu() then
-            setStatus("Tidak menemukan tombol mail")
+        setStatus("Preparing mail batch...")
+        local username = normalizeUsername(recipient)
+        if username == "" then
+            setStatus("Username penerima kosong")
             return false
         end
-        task.wait(0.4)
-        if not typeMailUsername(recipient) then
-            setStatus("Kotak username mail tidak ditemukan")
-            return false
-        end
-        task.wait(0.2)
+
         local selectedItems = getSelectedItems()
         if #selectedItems == 0 then
             setStatus("Tidak ada item terpilih")
             return false
         end
-        local sent = 0
-        for _, item in ipairs(selectedItems) do
-            for i = 1, item.qty do
-                if sent >= maxQty then
-                    break
-                end
-                if clickMailItem(item.name) then
-                    sent = sent + 1
-                    task.wait(0.12)
-                else
-                    break
-                end
-            end
-            if sent >= maxQty then
-                break
-            end
-        end
-        if sent == 0 then
-            setStatus("Item tidak berhasil dipilih di mail")
+
+        local userId = lookupRecipient(username)
+        if not userId then
+            setStatus("Recipient tidak ditemukan")
             return false
         end
-        if not clickSendMailButton() then
-            setStatus("Tombol kirim mail tidak ditemukan")
+        if userId == LocalPlayer.UserId then
+            setStatus("Tidak bisa mengirim ke diri sendiri")
             return false
         end
-        setStatus("Mengirim " .. tostring(sent) .. " item ke " .. tostring(recipient))
+
+        local payload, sentCount = buildPayloadFromSelection(selectedItems, maxQty or math.huge)
+        if sentCount == 0 or #payload == 0 then
+            setStatus("Tidak ada payload mail yang valid")
+            return false
+        end
+
+        local ok, message = sendBatch(userId, payload, settings.AutoMail.note)
+        if not ok then
+            setStatus("Send batch gagal: " .. tostring(message))
+            return false
+        end
+
+        setStatus("Terkirim " .. tostring(sentCount) .. " item ke " .. tostring(username))
         return true
     end
     local syncButton = Instance.new("TextButton")
