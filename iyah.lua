@@ -97,6 +97,8 @@ local function categorizeItem(name)
     return "Other"
 end
 
+local syncInventoryFunction
+
 local function createMailGui()
     if PlayerGui:FindFirstChild("MailGui") then
         return
@@ -131,7 +133,7 @@ local function createMailGui()
     local usernameBox = Instance.new("TextBox")
     usernameBox.Name = "UsernameBox"
     usernameBox.PlaceholderText = "Recipient Username"
-    usernameBox.Size = UDim2.new(0.9, 0, 0, 28)
+    usernameBox.Size = UDim2.new(0.63, 0, 0, 28)
     usernameBox.Position = UDim2.new(0.05, 0, 0, 40)
     usernameBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
     usernameBox.TextColor3 = Color3.fromRGB(240,240,240)
@@ -142,8 +144,8 @@ local function createMailGui()
     local quantityBox = Instance.new("TextBox")
     quantityBox.Name = "QuantityBox"
     quantityBox.PlaceholderText = "Jumlah item"
-    quantityBox.Size = UDim2.new(0.9, 0, 0, 28)
-    quantityBox.Position = UDim2.new(0.05, 0, 0, 76)
+    quantityBox.Size = UDim2.new(0.27, 0, 0, 28)
+    quantityBox.Position = UDim2.new(0.70, 0, 0, 40)
     quantityBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
     quantityBox.TextColor3 = Color3.fromRGB(240,240,240)
     quantityBox.Text = tostring(settings.AutoMail.itemcount)
@@ -153,7 +155,7 @@ local function createMailGui()
 
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 100)
+    itemList.Size = UDim2.new(0.9, 0, 0, 110)
     itemList.Position = UDim2.new(0.05, 0, 0.18, 0)
     itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
     itemList.ScrollBarThickness = 6
@@ -163,7 +165,7 @@ local function createMailGui()
     local selectedLabel = Instance.new("TextLabel")
     selectedLabel.Name = "SelectedLabel"
     selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
-    selectedLabel.Position = UDim2.new(0.05, 0, 0.56, 0)
+    selectedLabel.Position = UDim2.new(0.05, 0, 0.55, 0)
     selectedLabel.BackgroundTransparency = 1
     selectedLabel.Text = "Selected items: 0 | Qty: 0"
     selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
@@ -202,8 +204,8 @@ local function createMailGui()
 
     local function formatItemLabel(label, quantity, category)
         local result = label or ""
-        if quantity and tonumber(quantity) then
-            result = result .. " x" .. tostring(quantity)
+        if quantity and tonumber(quantity) and tonumber(quantity) > 1 then
+            result = result .. " (" .. tostring(quantity) .. ")"
         end
         result = result .. " [" .. category .. "]"
         return result
@@ -218,6 +220,7 @@ local function createMailGui()
         b.AutoButtonColor = true
         b.BackgroundColor3 = Color3.fromRGB(60,60,60)
         b.TextColor3 = Color3.fromRGB(240,240,240)
+        b.TextSize = 10
         b.Parent = itemList
         b:SetAttribute("Selected", false)
         b:SetAttribute("Category", category)
@@ -255,13 +258,13 @@ local function createMailGui()
     for index, categoryName in ipairs(categoryNames) do
         local catBtn = Instance.new("TextButton")
         catBtn.Name = categoryName .. "FilterBtn"
-        catBtn.Size = UDim2.new(0, 64, 0, 24)
-        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.18), 0, 0, 134)
+        catBtn.Size = UDim2.new(0, 58, 0, 24)
+        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.16), 0, 0.58, 0)
         catBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
         catBtn.TextColor3 = Color3.fromRGB(220,220,220)
         catBtn.Text = categoryName
         catBtn.Font = Enum.Font.Gotham
-        catBtn.TextSize = 11
+        catBtn.TextSize = 10
         catBtn.Parent = frame
         Instance.new("UICorner", catBtn).CornerRadius = UDim.new(0, 6)
 
@@ -279,22 +282,13 @@ local function createMailGui()
     categoryButtons[1].BackgroundColor3 = Color3.fromRGB(78,132,173)
     categoryButtons[1].TextColor3 = Color3.fromRGB(255,255,255)
 
-    -- sample items for testing (will be replaced by SyncInventory)
-    for _, itemName in ipairs(SEED_DATABASE) do
-        addItem(itemName, itemName, 1)
-    end
-    for _, itemName in ipairs(GEAR_DATABASE) do
-        addItem(itemName, itemName, 1)
-    end
-    for _, itemName in ipairs(PET_DATABASE) do
-        addItem(itemName, itemName, 1)
-    end
+    -- initial inventory will populate automatically from player containers
 
     -- small control buttons
     local selectAll = Instance.new("TextButton")
     selectAll.Name = "SelectAll"
-    selectAll.Size = UDim2.new(0.18, 0, 0, 26)
-    selectAll.Position = UDim2.new(0.05, 0, 0.62, 0)
+    selectAll.Size = UDim2.new(0.28, 0, 0, 26)
+    selectAll.Position = UDim2.new(0.05, 0, 0.66, 0)
     selectAll.Text = "Select All"
     selectAll.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectAll.TextColor3 = Color3.fromRGB(240,240,240)
@@ -303,46 +297,10 @@ local function createMailGui()
     selectAll.Parent = frame
     Instance.new("UICorner", selectAll).CornerRadius = UDim.new(0, 6)
 
-    local selectSeeds = Instance.new("TextButton")
-    selectSeeds.Name = "SelectSeeds"
-    selectSeeds.Size = UDim2.new(0.18, 0, 0, 26)
-    selectSeeds.Position = UDim2.new(0.26, 0, 0.62, 0)
-    selectSeeds.Text = "Select Seeds"
-    selectSeeds.BackgroundColor3 = Color3.fromRGB(55,55,60)
-    selectSeeds.TextColor3 = Color3.fromRGB(240,240,240)
-    selectSeeds.Font = Enum.Font.Gotham
-    selectSeeds.TextSize = 12
-    selectSeeds.Parent = frame
-    Instance.new("UICorner", selectSeeds).CornerRadius = UDim.new(0, 6)
-
-    local selectGear = Instance.new("TextButton")
-    selectGear.Name = "SelectGear"
-    selectGear.Size = UDim2.new(0.18, 0, 0, 26)
-    selectGear.Position = UDim2.new(0.47, 0, 0.62, 0)
-    selectGear.Text = "Select Gear"
-    selectGear.BackgroundColor3 = Color3.fromRGB(55,55,60)
-    selectGear.TextColor3 = Color3.fromRGB(240,240,240)
-    selectGear.Font = Enum.Font.Gotham
-    selectGear.TextSize = 12
-    selectGear.Parent = frame
-    Instance.new("UICorner", selectGear).CornerRadius = UDim.new(0, 6)
-
-    local selectPets = Instance.new("TextButton")
-    selectPets.Name = "SelectPets"
-    selectPets.Size = UDim2.new(0.18, 0, 0, 26)
-    selectPets.Position = UDim2.new(0.68, 0, 0.62, 0)
-    selectPets.Text = "Select Pets"
-    selectPets.BackgroundColor3 = Color3.fromRGB(55,55,60)
-    selectPets.TextColor3 = Color3.fromRGB(240,240,240)
-    selectPets.Font = Enum.Font.Gotham
-    selectPets.TextSize = 12
-    selectPets.Parent = frame
-    Instance.new("UICorner", selectPets).CornerRadius = UDim.new(0, 6)
-
     local clearSel = Instance.new("TextButton")
     clearSel.Name = "ClearSelection"
-    clearSel.Size = UDim2.new(0.23, 0, 0, 26)
-    clearSel.Position = UDim2.new(0.05, 0, 0.70, 0)
+    clearSel.Size = UDim2.new(0.28, 0, 0, 26)
+    clearSel.Position = UDim2.new(0.37, 0, 0.66, 0)
     clearSel.Text = "Clear"
     clearSel.BackgroundColor3 = Color3.fromRGB(55,55,60)
     clearSel.TextColor3 = Color3.fromRGB(240,240,240)
@@ -354,7 +312,7 @@ local function createMailGui()
     local send = Instance.new("TextButton")
     send.Name = "SendButton"
     send.Size = UDim2.new(0.45, 0, 0, 26)
-    send.Position = UDim2.new(0.05, 0, 0.82, 0)
+    send.Position = UDim2.new(0.05, 0, 0.76, 0)
     send.Text = "Send Gift"
     send.BackgroundColor3 = Color3.fromRGB(60,120,180)
     send.TextColor3 = Color3.fromRGB(240,240,240)
@@ -366,7 +324,7 @@ local function createMailGui()
     local autoBtn = Instance.new("TextButton")
     autoBtn.Name = "AutoGiftButton"
     autoBtn.Size = UDim2.new(0.45, 0, 0, 26)
-    autoBtn.Position = UDim2.new(0.5, 0, 0.82, 0)
+    autoBtn.Position = UDim2.new(0.5, 0, 0.76, 0)
     autoBtn.Text = "Auto Gift OFF"
     autoBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
     autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
@@ -374,18 +332,6 @@ local function createMailGui()
     autoBtn.TextSize = 12
     autoBtn.Parent = frame
     Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 6)
-
-    local syncBtn = Instance.new("TextButton")
-    syncBtn.Name = "SyncInventory"
-    syncBtn.Size = UDim2.new(0.9, 0, 0, 26)
-    syncBtn.Position = UDim2.new(0.05, 0, 0.49, 0)
-    syncBtn.Text = "Sync Inventory"
-    syncBtn.BackgroundColor3 = Color3.fromRGB(90,90,95)
-    syncBtn.TextColor3 = Color3.fromRGB(240,240,240)
-    syncBtn.Font = Enum.Font.Gotham
-    syncBtn.TextSize = 12
-    syncBtn.Parent = frame
-    Instance.new("UICorner", syncBtn).CornerRadius = UDim.new(0, 6)
 
     local mailButton = Instance.new("TextButton")
     mailButton.Name = "MailButton"
@@ -435,19 +381,7 @@ local function createMailGui()
     cancelBtn.Parent = confirmFrame
 
     selectAll.Activated:Connect(function()
-        selectCategoryItems("All", true)
-    end)
-
-    selectSeeds.Activated:Connect(function()
-        selectCategoryItems("Seeds", true)
-    end)
-
-    selectGear.Activated:Connect(function()
-        selectCategoryItems("Gear", true)
-    end)
-
-    selectPets.Activated:Connect(function()
-        selectCategoryItems("Pets", true)
+        selectCategoryItems(selectedCategory, true)
     end)
 
     clearSel.Activated:Connect(function()
@@ -549,6 +483,8 @@ local function createMailGui()
         end)
     end
 
+    syncInventoryFunction = syncInventory
+
     local autoGiftEnabled = false
     local autoGiftRunning = false
 
@@ -612,10 +548,6 @@ local function createMailGui()
             autoGiftRunning = false
         end)
     end
-
-    syncBtn.Activated:Connect(function()
-        syncInventory()
-    end)
 
     autoBtn.Activated:Connect(function()
         autoGiftEnabled = not autoGiftEnabled
@@ -689,6 +621,9 @@ local function createMailGui()
         screen.Parent = PlayerGui
         mailButton.Parent = screen
     end
+
+    -- load current inventory automatically
+    syncInventory()
 end
 local function sleep(seconds)
     if task and task.wait then
@@ -894,14 +829,10 @@ end
 
 EnsureUI()
 
--- Expose a top-level SyncInventory function that triggers UI sync
 local function SyncInventory()
     EnsureUI()
-    local screen = PlayerGui:FindFirstChild("MailGui")
-    if not screen then return false end
-    local syncBtn = screen:FindFirstChild("MainFrame") and screen.MainFrame:FindFirstChild("SyncInventory")
-    if syncBtn and syncBtn.Activated then
-        pcall(function() syncBtn:Activate() end)
+    if syncInventoryFunction then
+        syncInventoryFunction()
         return true
     end
     return false
