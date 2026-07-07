@@ -855,7 +855,7 @@ end
     sendButton.Position = UDim2.new(0.34, 0, 0, 266)
     sendButton.Text = "Send Mail"
     sendButton.BackgroundColor3 = Color3.fromRGB(75, 125, 180)
-    sendButton.TextColor3 = Color3.fromRGB(240, 240, 240)
+    sendButton.TextColor3 = Color3.fromRGB(245, 245, 245)
     sendButton.Font = Enum.Font.Gotham
     sendButton.TextSize = 12
     sendButton.Parent = frame
@@ -893,6 +893,24 @@ end
     clearButton.TextSize = 12
     clearButton.Parent = frame
     Instance.new("UICorner", clearButton).CornerRadius = UDim.new(0, 6)
+    local claimPanel = Instance.new("Frame")
+    claimPanel.Name = "Auto ClaimPanel"
+    laimPanel.Size = UDim2.new(1, -16, 1, -50)
+    claimPanel.Position = UDim2.new(0, 8, 0, 40)
+    claimPanel.BackgroundTransparency = 1
+    claimPanel.Visible = false
+    claimPanel.Parent = frame
+
+    local claimToggleButton = Instance.new("TextButton")
+    claimToggleButton.Text = "Auto Claim: OFF"
+    claimToggleButton.Size = UDim2.new(0.45, 0, 0, 28)
+    claimToggleButton.Position = UDim2.new(0, 8, 0, 0)
+    claimToggleButton.Parent = claimPanel
+    claimToggleButton.Activated:Connect(function()
+    toggleAutoClaim()
+    claimToggleButton.Text = autoClaimEnabled and "Auto Claim: ON" or "Auto Claim: OFF"
+    end)
+
     local autoEnabled = false
     local autoRunning = false
     local function updateAutoButton()
@@ -942,6 +960,73 @@ end
             autoRunning = false
         end)
     end
+    -- Toggle Auto Buy ON/OFF
+local autoBuyEnabled = false
+
+local function toggleAutoBuy(itemName, qty)
+    autoBuyEnabled = not autoBuyEnabled
+    if autoBuyEnabled then
+        task.spawn(function()
+            while autoBuyEnabled do
+                if Networking and Networking.Shop and Networking.Shop.BuyItem then
+                    local ok, result = pcall(function()
+                        return Networking.Shop.BuyItem:Fire(itemName, qty or 1)
+                    end)
+                    setStatus(ok and "Bought " .. itemName or "Buy failed")
+                end
+                task.wait(2) -- interval pembelian
+            end
+        end)
+    end
+end
+
+-- Toggle Auto Claim Drop Seed ON/OFF
+local autoClaimEnabled = false
+
+local function toggleAutoClaim()
+    autoClaimEnabled = not autoClaimEnabled
+    if autoClaimEnabled then
+        task.spawn(function()
+            while autoClaimEnabled do
+                if Networking and Networking.Drops and Networking.Drops.Claim then
+                    local ok, result = pcall(function()
+                        return Networking.Drops.Claim:Fire()
+                    end)
+                    setStatus(ok and "Drop claimed" or "Claim failed")
+                end
+                task.wait(5) -- interval klaim drop
+            end
+        end)
+    end
+end
+
+-- Refresh Inventory (dipanggil dari tombol Clear)
+local function refreshInventory()
+    for _, child in ipairs(itemList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local entries = collectReplicaInventoryEntries()
+    for _, entry in ipairs(entries) do
+        addItemButton(entry.DisplayName, entry.Owned, entry.ItemKey, entry.InventoryCategory)
+    end
+    setStatus("Inventory refreshed")
+end
+
+-- Select All Items
+local function selectAllItems()
+    for _, child in ipairs(itemList:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:SetAttribute("Selected", true)
+            child.BackgroundColor3 = Color3.fromRGB(90, 150, 90)
+        end
+    end
+end
+
+-- Clear Items (sekalian refresh)
+local function clearItems()
+    refreshInventory()
+end
+
     syncButton.Activated:Connect(refreshInventory)
     sendButton.Activated:Connect(function()
         local recipient = usernameBox.Text
