@@ -1,6 +1,5 @@
 -- Roblox exploit-friendly Auto Gift Mail script for Grow A Garden 2
 -- Script dioptimalkan untuk deteksi inventory dan mail UI.
-
 -- luacheck: globals game task wait
 ---@diagnostic disable: undefined-global
 
