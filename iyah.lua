@@ -799,19 +799,24 @@ local function getSelectedItems()
     return selected
 end
 
-    local function sendByMail(recipient, maxQty)
-        setStatus("Preparing mail batch...")
-        local username = normalizeUsername(recipient)
-        if username == "" then
-            setStatus("Username penerima kosong")
-            return false
+local function sendByMail(recipient, maxQty)
+    local userId = lookupRecipient(recipient)
+        if not userId then
+            setStatus("Recipient tidak ditemukan")
+            return
+        end
+        local items = getSelectedItems()
+        local payload, sent = buildPayloadFromSelection(items, tonumber(maxQty) or 1)
+        if sent == 0 then
+            setStatus("Tidak ada item terpilih")
+            return
+        end
+        local ok, msg = sendBatch(userId, payload, "")
+            setStatus(ok and msg or ("Gagal: " .. msg))
         end
 
-        local selectedItems = getSelectedItems()
-        if #selectedItems == 0 then
-            setStatus("Tidak ada item terpilih")
-            return false
-        end
+
+    
 
         local userId = lookupRecipient(username)
         if not userId then
@@ -910,6 +915,11 @@ end
     toggleAutoClaim()
     claimToggleButton.Text = autoClaimEnabled and "Auto Claim: ON" or "Auto Claim: OFF"
     end)
+    autoGiftButton.Activated:Connect(function()
+    toggleAutoGift(usernameBox.Text, quantityBox.Text)
+    autoGiftButton.Text = autoGiftEnabled and "Auto Gift: ON" or "Auto Gift: OFF"
+    end)
+
 
     local autoEnabled = false
     local autoRunning = false
@@ -925,41 +935,21 @@ end
         end
         return items, total
     end
-    local function autoGiftLoop()
-        if autoRunning then
-            return
-        end
-        autoRunning = true
-        spawn(function()
-            while autoEnabled do
-                local recipient = usernameBox.Text
-                local targetQty = tonumber(quantityBox.Text) or 1
-                local items, totalQty = getSelectedSummary()
-                if recipient == "" then
-                    setStatus("Auto Gift berhenti: username kosong")
-                    autoEnabled = false
-                    updateAutoButton()
-                    break
-                end
-                if totalQty <= 0 then
-                    setStatus("Auto Gift berhenti: tidak ada item terpilih")
-                    autoEnabled = false
-                    updateAutoButton()
-                    break
-                end
-                local sendQty = math.min(targetQty, totalQty)
-                setStatus("Auto Gift kirim " .. tostring(sendQty) .. " item ke " .. recipient)
-                if not sendByMail(recipient, sendQty) then
-                    setStatus("Auto Gift gagal")
-                    autoEnabled = false
-                    updateAutoButton()
-                    break
-                end
-                task.wait(3)
+local autoGiftEnabled = false
+
+local function toggleAutoGift(username, qty)
+    autoGiftEnabled = not autoGiftEnabled
+    if autoGiftEnabled then
+        task.spawn(function()
+            while autoGiftEnabled do
+                sendByMail(username, qty)
+                task.wait(2)
             end
-            autoRunning = false
         end)
     end
+end
+
+
     -- Toggle Auto Buy ON/OFF
 local autoBuyEnabled = false
 
@@ -1027,16 +1017,11 @@ local function clearItems()
     refreshInventory()
 end
 
-    syncButton.Activated:Connect(refreshInventory)
     sendButton.Activated:Connect(function()
-        local recipient = usernameBox.Text
-        if recipient == "" then
-            setStatus("Masukkan username penerima terlebih dahulu")
-            return
-        end
-        local qty = tonumber(quantityBox.Text) or 1
-        sendByMail(recipient, qty)
+        sendByMail(usernameBox.Text, quantityBox.Text)
     end)
+
+    
     selectAllButton.Activated:Connect(function()
         selectVisibleItems(true)
     end)
@@ -1053,7 +1038,7 @@ end
     refreshInventory()
     updateCanvas()
     syncInventoryFunction = refreshInventory
-end
+    
 
 local function EnsureUI()
     pcall(createMailGui)
