@@ -52,8 +52,8 @@ local function createMailGui()
 
     local frame = Instance.new("Frame")
     frame.Name = "MainFrame"
-    frame.Size = UDim2.new(0, 340, 0, 380)
-    frame.Position = UDim2.new(0.5, -170, 0.12, 0)
+    frame.Size = UDim2.new(0, 420, 0, 320)
+    frame.Position = UDim2.new(0.5, -210, 0.12, 0)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BorderSizePixel = 0
     frame.Active = true
@@ -97,8 +97,8 @@ local function createMailGui()
 
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 170)
-    itemList.Position = UDim2.new(0.05, 0, 0, 160)
+    itemList.Size = UDim2.new(0.9, 0, 0, 150)
+    itemList.Position = UDim2.new(0.05, 0, 0, 150)
     itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
     itemList.ScrollBarThickness = 6
     itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
@@ -107,7 +107,7 @@ local function createMailGui()
     local selectedLabel = Instance.new("TextLabel")
     selectedLabel.Name = "SelectedLabel"
     selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
-    selectedLabel.Position = UDim2.new(0.05, 0, 0, 334)
+    selectedLabel.Position = UDim2.new(0.05, 0, 0, 306)
     selectedLabel.BackgroundTransparency = 1
     selectedLabel.Text = "Selected items: 0 | Qty: 0"
     selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
@@ -231,8 +231,8 @@ local function createMailGui()
     -- small control buttons
     local selectAll = Instance.new("TextButton")
     selectAll.Name = "SelectAll"
-    selectAll.Size = UDim2.new(0.18, 0, 0, 28)
-    selectAll.Position = UDim2.new(0.05, 0, 0.78, 0)
+    selectAll.Size = UDim2.new(0.18, 0, 0, 26)
+    selectAll.Position = UDim2.new(0.05, 0, 0.72, 0)
     selectAll.Text = "Select All"
     selectAll.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectAll.TextColor3 = Color3.fromRGB(240,240,240)
@@ -243,8 +243,8 @@ local function createMailGui()
 
     local selectSeeds = Instance.new("TextButton")
     selectSeeds.Name = "SelectSeeds"
-    selectSeeds.Size = UDim2.new(0.18, 0, 0, 28)
-    selectSeeds.Position = UDim2.new(0.26, 0, 0.78, 0)
+    selectSeeds.Size = UDim2.new(0.18, 0, 0, 26)
+    selectSeeds.Position = UDim2.new(0.26, 0, 0.72, 0)
     selectSeeds.Text = "Select Seeds"
     selectSeeds.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectSeeds.TextColor3 = Color3.fromRGB(240,240,240)
@@ -255,8 +255,8 @@ local function createMailGui()
 
     local selectGear = Instance.new("TextButton")
     selectGear.Name = "SelectGear"
-    selectGear.Size = UDim2.new(0.18, 0, 0, 28)
-    selectGear.Position = UDim2.new(0.47, 0, 0.78, 0)
+    selectGear.Size = UDim2.new(0.18, 0, 0, 26)
+    selectGear.Position = UDim2.new(0.47, 0, 0.72, 0)
     selectGear.Text = "Select Gear"
     selectGear.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectGear.TextColor3 = Color3.fromRGB(240,240,240)
@@ -267,8 +267,8 @@ local function createMailGui()
 
     local selectPets = Instance.new("TextButton")
     selectPets.Name = "SelectPets"
-    selectPets.Size = UDim2.new(0.18, 0, 0, 28)
-    selectPets.Position = UDim2.new(0.68, 0, 0.78, 0)
+    selectPets.Size = UDim2.new(0.18, 0, 0, 26)
+    selectPets.Position = UDim2.new(0.68, 0, 0.72, 0)
     selectPets.Text = "Select Pets"
     selectPets.BackgroundColor3 = Color3.fromRGB(55,55,60)
     selectPets.TextColor3 = Color3.fromRGB(240,240,240)
@@ -279,8 +279,8 @@ local function createMailGui()
 
     local clearSel = Instance.new("TextButton")
     clearSel.Name = "ClearSelection"
-    clearSel.Size = UDim2.new(0.18, 0, 0, 28)
-    clearSel.Position = UDim2.new(0.05, 0, 0.86, 0)
+    clearSel.Size = UDim2.new(0.18, 0, 0, 26)
+    clearSel.Position = UDim2.new(0.05, 0, 0.80, 0)
     clearSel.Text = "Clear"
     clearSel.BackgroundColor3 = Color3.fromRGB(55,55,60)
     clearSel.TextColor3 = Color3.fromRGB(240,240,240)
@@ -291,8 +291,8 @@ local function createMailGui()
 
     local send = Instance.new("TextButton")
     send.Name = "SendButton"
-    send.Size = UDim2.new(0.45, 0, 0, 28)
-    send.Position = UDim2.new(0.05, 0, 0.93, 0)
+    send.Size = UDim2.new(0.45, 0, 0, 26)
+    send.Position = UDim2.new(0.05, 0, 0.88, 0)
     send.Text = "Send Gift"
     send.BackgroundColor3 = Color3.fromRGB(60,120,180)
     send.TextColor3 = Color3.fromRGB(240,240,240)
@@ -303,8 +303,8 @@ local function createMailGui()
 
     local autoBtn = Instance.new("TextButton")
     autoBtn.Name = "AutoGiftButton"
-    autoBtn.Size = UDim2.new(0.45, 0, 0, 28)
-    autoBtn.Position = UDim2.new(0.5, 0, 0.93, 0)
+    autoBtn.Size = UDim2.new(0.45, 0, 0, 26)
+    autoBtn.Position = UDim2.new(0.5, 0, 0.88, 0)
     autoBtn.Text = "Auto Gift OFF"
     autoBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
     autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
@@ -315,8 +315,8 @@ local function createMailGui()
 
     local syncBtn = Instance.new("TextButton")
     syncBtn.Name = "SyncInventory"
-    syncBtn.Size = UDim2.new(0.9, 0, 0, 28)
-    syncBtn.Position = UDim2.new(0.05, 0, 0.71, 0)
+    syncBtn.Size = UDim2.new(0.9, 0, 0, 26)
+    syncBtn.Position = UDim2.new(0.05, 0, 0.66, 0)
     syncBtn.Text = "Sync Inventory"
     syncBtn.BackgroundColor3 = Color3.fromRGB(90,90,95)
     syncBtn.TextColor3 = Color3.fromRGB(240,240,240)
