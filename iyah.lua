@@ -1,8 +1,6 @@
 -- Roblox exploit-friendly Auto Gift Mail script for Grow A Garden 2
--- Sesuaikan uiPath sesuai struktur GUI game/mailing.
+-- Script dioptimalkan untuk deteksi inventory dan mail UI.
 
--- Local aliases to satisfy linters/editors that flag engine globals
--- Inform common linters that these engine globals are expected
 -- luacheck: globals game task wait
 ---@diagnostic disable: undefined-global
 
@@ -15,16 +13,6 @@ local settings = {
         username = "Ceszganteng",
         itemcount = 20,
     },
-    Settings = {
-        MoveSpeed = 16,
-    },
-}
-
-local uiPath = {
-    MailButton = {"MailGui", "MailButton"},
-    UsernameBox = {"MailGui", "MainFrame", "UsernameBox"},
-    ItemList = {"MailGui", "MainFrame", "ItemList"},
-    SendButton = {"MailGui", "MainFrame", "SendButton"},
 }
 
 local SEED_DATABASE = {
@@ -53,14 +41,54 @@ local GEAR_DATABASE = {
     "Strawberry Sniper", "Player Magnet", "Super Watering Can", "Super Sprinkler"
 }
 
+local function normalizeText(value)
+    local text = tostring(value or "")
+    text = text:gsub("%c", " ")
+    text = text:gsub("%s+", " ")
+    text = text:gsub("^%s*(.-)%s*$", "%1")
+    return text
+end
+
+local function parseItemText(text)
+    text = normalizeText(text)
+    local name, qty = text:match("^(.-)%s*[xX]%s*(%d+)$")
+    if not name then
+        name, qty = text:match("^(.-)%s*%((%d+)%)$")
+    end
+    if not name or name == "" then
+        name = text
+    end
+    return normalizeText(name), tonumber(qty) or 1
+end
+
+local function findKnownItemName(label)
+    local lower = label:lower()
+    for _, item in ipairs(SEED_DATABASE) do
+        if lower:find(item:lower(), 1, true) then
+            return item
+        end
+    end
+    for _, item in ipairs(PET_DATABASE) do
+        if lower:find(item:lower(), 1, true) then
+            return item
+        end
+    end
+    for _, item in ipairs(GEAR_DATABASE) do
+        if lower:find(item:lower(), 1, true) then
+            return item
+        end
+    end
+    return label
+end
+
 local function categorizeItem(name)
-    local lower = string.lower(name)
+    local lower = name:lower()
     local seedTerms = {
         "seed", "sapling", "sprout", "plant", "berry", "bean", "melon", "pumpkin", "carrot",
         "potato", "corn", "wheat", "flower", "leaf", "grass", "tree", "root", "vine",
         "tulip", "tomato", "apple", "bamboo", "cactus", "pineapple", "mushroom", "banana",
         "grape", "coconut", "mango", "dragon fruit", "acorn", "cherry", "sunflower",
-        "venus fly trap", "pomegranate", "poison apple", "poison", "venom spitter", "moon bloom",
+        "venus fly trap", "pomegranate", "poison apple", "venom spitter", "moon bloom",
         "hypno bloom", "dragon's breath"
     }
     local gearTerms = {
@@ -75,815 +103,638 @@ local function categorizeItem(name)
         "turtle", "penguin", "koala", "dino", "kitty", "puppy", "blob", "critter", "bee",
         "robin", "frog", "monkey", "deer", "dragonfly"
     }
-
     for _, term in ipairs(seedTerms) do
         if lower:find(term, 1, true) then
             return "Seeds"
         end
     end
-
     for _, term in ipairs(gearTerms) do
         if lower:find(term, 1, true) then
             return "Gear"
         end
     end
-
     for _, term in ipairs(petTerms) do
         if lower:find(term, 1, true) then
             return "Pets"
         end
     end
-
     return "Other"
 end
 
 local syncInventoryFunction
 
+local function safeGetAttribute(instance, key)
+    if not instance or not instance.GetAttribute then
+        return nil
+    end
+    local ok, value = pcall(function()
+        return instance:GetAttribute(key)
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function extractQuantity(instance)
+    if not instance then
+        return 1
+    end
+    local keys = {"Quantity", "Amount", "Count", "Stack", "StackSize", "Qty"}
+    for _, key in ipairs(keys) do
+        local attr = safeGetAttribute(instance, key)
+        if tonumber(attr) then
+            return tonumber(attr)
+        end
+        local child = instance:FindFirstChild(key)
+        if child and (child:IsA("IntValue") or child:IsA("NumberValue")) then
+            return child.Value
+        end
+    end
+    if instance:IsA("IntValue") or instance:IsA("NumberValue") then
+        return instance.Value
+    end
+    if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+        local _, qty = parseItemText(instance.Text)
+        return qty
+    end
+    return 1
+end
+
+local function extractName(instance)
+    if not instance then
+        return ""
+    end
+    if instance:IsA("StringValue") then
+        return normalizeText(instance.Value)
+    end
+    if instance:IsA("ObjectValue") then
+        return normalizeText(instance.Name)
+    end
+    if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+        local txt = normalizeText(instance.Text)
+        if txt ~= "" then
+            local name, _ = parseItemText(txt)
+            return normalizeText(name)
+        end
+    end
+    local attr = safeGetAttribute(instance, "DisplayName") or safeGetAttribute(instance, "ItemName") or safeGetAttribute(instance, "Name")
+    if attr and attr ~= "" then
+        return normalizeText(attr)
+    end
+    return normalizeText(instance.Name)
+end
+
+local function isOwnGui(instance)
+    local mailGui = PlayerGui:FindFirstChild("MailGui")
+    return mailGui and instance and instance:IsDescendantOf(mailGui)
+end
+
+local function collectInventoryItems(outMap)
+    local seen = {}
+    local function add(name, qty)
+        name = normalizeText(name)
+        if name == "" then
+            return
+        end
+        name = findKnownItemName(name)
+        outMap[name] = (outMap[name] or 0) + (tonumber(qty) or 1)
+    end
+    local function scan(obj)
+        if not obj or seen[obj] or isOwnGui(obj) then
+            return
+        end
+        seen[obj] = true
+        local name = extractName(obj)
+        local qty = extractQuantity(obj)
+        if name ~= "" and name:len() > 1 then
+            add(name, qty)
+        end
+        for _, child in ipairs(obj:GetChildren()) do
+            scan(child)
+        end
+    end
+    local roots = {
+        LocalPlayer,
+        LocalPlayer:FindFirstChild("Backpack"),
+        LocalPlayer:FindFirstChild("Inventory"),
+        LocalPlayer:FindFirstChild("_Inventory"),
+        LocalPlayer:FindFirstChild("StarterPack"),
+        LocalPlayer:FindFirstChild("StarterGear"),
+        LocalPlayer:FindFirstChild("Character"),
+        game:GetService("ReplicatedStorage"),
+        game:GetService("ServerStorage"),
+        workspace,
+        PlayerGui,
+    }
+    local function isInventoryRoot(obj)
+        if not obj or not obj.Name then
+            return false
+        end
+        local lower = obj.Name:lower()
+        local hints = {"backpack", "inventory", "items", "storage", "bag", "chest", "data", "box", "container", "holder"}
+        for _, hint in ipairs(hints) do
+            if lower:find(hint, 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+    for _, root in ipairs(roots) do
+        if root then
+            if isInventoryRoot(root) then
+                scan(root)
+            end
+            for _, child in ipairs(root:GetChildren()) do
+                if isInventoryRoot(child) then
+                    scan(child)
+                end
+            end
+        end
+    end
+    for _, gui in ipairs(PlayerGui:GetDescendants()) do
+        if not isOwnGui(gui) and (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) then
+            local text = normalizeText(gui.Text)
+            if text ~= "" then
+                local label, qty = parseItemText(text)
+                if label ~= "" and qty > 0 and label:len() > 2 then
+                    add(label, qty)
+                end
+            end
+        end
+    end
+end
+
 local function createMailGui()
     if PlayerGui:FindFirstChild("MailGui") then
         return
     end
-
     local screen = Instance.new("ScreenGui")
     screen.Name = "MailGui"
     screen.ResetOnSpawn = false
-
+    screen.Parent = PlayerGui
     local frame = Instance.new("Frame")
     frame.Name = "MainFrame"
-    frame.Size = UDim2.new(0, 420, 0, 300)
-    frame.Position = UDim2.new(0.5, -210, 0.12, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.Size = UDim2.new(0, 460, 0, 340)
+    frame.Position = UDim2.new(0.5, -230, 0.08, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
     frame.BorderSizePixel = 0
     frame.Active = true
     frame.Draggable = true
-    frame.Visible = false
     frame.Parent = screen
-
     local title = Instance.new("TextLabel")
     title.Name = "Title"
-    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Size = UDim2.new(1, 0, 0, 34)
     title.Position = UDim2.new(0, 0, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "Mail"
-    title.TextColor3 = Color3.fromRGB(255,255,255)
-    title.Font = Enum.Font.SourceSansBold
-    title.TextSize = 20
+    title.Text = "Grow A Garden 2 - Mail Exploiter"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Parent = frame
-
-    local categoryButtonsFrame = Instance.new("Frame")
-    categoryButtonsFrame.Name = "CategoryButtonsFrame"
-    categoryButtonsFrame.Size = UDim2.new(0.9, 0, 0, 32)
-    categoryButtonsFrame.Position = UDim2.new(0.05, 0, 0.10, 0)
-    categoryButtonsFrame.BackgroundTransparency = 1
-    categoryButtonsFrame.Parent = frame
-
+    local categoryFrame = Instance.new("Frame")
+    categoryFrame.Name = "CategoryFrame"
+    categoryFrame.Size = UDim2.new(1, -16, 0, 34)
+    categoryFrame.Position = UDim2.new(0, 8, 0, 44)
+    categoryFrame.BackgroundTransparency = 1
+    categoryFrame.Parent = frame
+    local categoryNames = {"All", "Seeds", "Gear", "Pets", "Other"}
+    local selectedCategory = "All"
+    local categoryButtons = {}
+    local function updateCategoryButtons()
+        for _, btn in ipairs(categoryButtons) do
+            local active = btn.Name == selectedCategory
+            btn.BackgroundColor3 = active and Color3.fromRGB(88, 136, 186) or Color3.fromRGB(42, 42, 48)
+            btn.TextColor3 = active and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(220, 220, 220)
+        end
+    end
+    for index, name in ipairs(categoryNames) do
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Size = UDim2.new(0, 82, 0, 30)
+        btn.Position = UDim2.new(0, (index - 1) * 86, 0, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
+        btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        btn.Text = name
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 12
+        btn.AutoButtonColor = true
+        btn.Parent = categoryFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+        btn.Activated:Connect(function()
+            selectedCategory = name
+            updateCategoryButtons()
+            for _, child in ipairs(frame.ItemList:GetChildren()) do
+                if child:IsA("TextButton") then
+                    local category = child:GetAttribute("Category") or "Other"
+                    child.Visible = selectedCategory == "All" or category == selectedCategory
+                end
+            end
+        end)
+        table.insert(categoryButtons, btn)
+    end
+    updateCategoryButtons()
     local itemList = Instance.new("ScrollingFrame")
     itemList.Name = "ItemList"
-    itemList.Size = UDim2.new(0.9, 0, 0, 120)
-    itemList.Position = UDim2.new(0.05, 0, 0.18, 0)
-    itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    itemList.Size = UDim2.new(1, -16, 0, 170)
+    itemList.Position = UDim2.new(0, 8, 0, 84)
+    itemList.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+    itemList.BorderSizePixel = 0
     itemList.ScrollBarThickness = 6
-    itemList.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
     itemList.Parent = frame
-
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Parent = itemList
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 6)
     local usernameBox = Instance.new("TextBox")
     usernameBox.Name = "UsernameBox"
     usernameBox.PlaceholderText = "Recipient Username"
-    usernameBox.Size = UDim2.new(0.63, 0, 0, 28)
-    usernameBox.Position = UDim2.new(0.05, 0, 0.62, 0)
-    usernameBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
-    usernameBox.TextColor3 = Color3.fromRGB(240,240,240)
-    usernameBox.Text = tostring(settings.AutoMail.username)
+    usernameBox.Size = UDim2.new(0.6, 0, 0, 32)
+    usernameBox.Position = UDim2.new(0, 8, 0, 266)
+    usernameBox.BackgroundColor3 = Color3.fromRGB(52, 52, 58)
+    usernameBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+    usernameBox.Text = settings.AutoMail.username
     usernameBox.ClearTextOnFocus = false
     usernameBox.Parent = frame
-
     local quantityBox = Instance.new("TextBox")
     quantityBox.Name = "QuantityBox"
-    quantityBox.PlaceholderText = "Jumlah item"
-    quantityBox.Size = UDim2.new(0.27, 0, 0, 28)
-    quantityBox.Position = UDim2.new(0.70, 0, 0.62, 0)
-    quantityBox.BackgroundColor3 = Color3.fromRGB(50,50,55)
-    quantityBox.TextColor3 = Color3.fromRGB(240,240,240)
+    quantityBox.PlaceholderText = "Qty to send"
+    quantityBox.Size = UDim2.new(0.28, 0, 0, 32)
+    quantityBox.Position = UDim2.new(0.62, 0, 0, 266)
+    quantityBox.BackgroundColor3 = Color3.fromRGB(52, 52, 58)
+    quantityBox.TextColor3 = Color3.fromRGB(240, 240, 240)
     quantityBox.Text = tostring(settings.AutoMail.itemcount)
     quantityBox.ClearTextOnFocus = false
     quantityBox.Parent = frame
-
-    local selectedLabel = Instance.new("TextLabel")
-    selectedLabel.Name = "SelectedLabel"
-    selectedLabel.Size = UDim2.new(0.9, 0, 0, 18)
-    selectedLabel.Position = UDim2.new(0.05, 0, 0.56, 0)
-    selectedLabel.BackgroundTransparency = 1
-    selectedLabel.Text = "Selected items: 0 | Qty: 0"
-    selectedLabel.TextColor3 = Color3.fromRGB(220,220,220)
-    selectedLabel.Font = Enum.Font.Gotham
-    selectedLabel.TextSize = 12
-    selectedLabel.TextXAlignment = Enum.TextXAlignment.Left
-    selectedLabel.Parent = frame
-
-    local uiLayout = Instance.new("UIListLayout")
-    uiLayout.Parent = itemList
-    uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    uiLayout.Padding = UDim.new(0, 6)
-
-    local selectedCategory = "All"
-    local categoryNames = {"All", "Seeds", "Gear", "Pets"}
-
-    local function updateSelectedStats()
-        local selectedCount, totalQty = 0, 0
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                selectedCount = selectedCount + 1
-                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
-            end
-        end
-        selectedLabel.Text = "Selected items: " .. tostring(selectedCount) .. " | Qty: " .. tostring(totalQty)
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Name = "StatusLabel"
+    statusLabel.Size = UDim2.new(1, -16, 0, 22)
+    statusLabel.Position = UDim2.new(0, 8, 0, 306)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Ready"
+    statusLabel.TextColor3 = Color3.fromRGB(215, 215, 215)
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextSize = 12
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = frame
+    local function setStatus(text)
+        statusLabel.Text = tostring(text)
+        print("[GrowAGarden2 Mail] " .. tostring(text))
     end
-
-    local function updateItemVisibility()
-        for _, itemButton in ipairs(itemList:GetChildren()) do
-            if itemButton:IsA("TextButton") then
-                local category = itemButton:GetAttribute("Category") or "Other"
-                itemButton.Visible = (selectedCategory == "All") or (category == selectedCategory)
-            end
-        end
+    local function updateCanvas()
+        itemList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
     end
-
-    local function formatItemLabel(label, quantity, category)
-        local result = label or ""
-        if quantity and tonumber(quantity) and tonumber(quantity) > 1 then
-            result = result .. " (" .. tostring(quantity) .. ")"
+    local function formatLabel(itemName, qty, category)
+        local label = itemName
+        if qty and qty > 1 then
+            label = label .. " (" .. tostring(qty) .. ")"
         end
-        result = result .. " [" .. category .. "]"
-        return result
+        label = label .. " [" .. tostring(category) .. "]"
+        return label
     end
-
-    local function addItem(name, label, quantity)
-        local category = categorizeItem(name)
-        local b = Instance.new("TextButton")
-        b.Name = name
-        b.Size = UDim2.new(1, -10, 0, 30)
-        b.Text = formatItemLabel(label or name, quantity, category)
-        b.AutoButtonColor = true
-        b.BackgroundColor3 = Color3.fromRGB(60,60,60)
-        b.TextColor3 = Color3.fromRGB(240,240,240)
-        b.TextSize = 10
-        b.Parent = itemList
-        b:SetAttribute("Selected", false)
-        b:SetAttribute("Category", category)
-        if quantity then
-            b:SetAttribute("Quantity", quantity)
-        end
-
-        b.Activated:Connect(function()
-            local sel = not b:GetAttribute("Selected")
-            b:SetAttribute("Selected", sel)
-            if sel then
-                b.BackgroundColor3 = Color3.fromRGB(80,140,80)
-            else
-                b.BackgroundColor3 = Color3.fromRGB(60,60,60)
-            end
-            updateSelectedStats()
+    local function addItemButton(itemName, qty)
+        local category = categorizeItem(itemName)
+        local btn = Instance.new("TextButton")
+        btn.Name = itemName:gsub("%s+", "_")
+        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        btn.TextColor3 = Color3.fromRGB(235, 235, 235)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 12
+        btn.AutoButtonColor = true
+        btn.Text = formatLabel(itemName, qty, category)
+        btn.Parent = itemList
+        btn:SetAttribute("Selected", false)
+        btn:SetAttribute("Category", category)
+        btn:SetAttribute("Quantity", qty)
+        btn.Activated:Connect(function()
+            local selected = not btn:GetAttribute("Selected")
+            btn:SetAttribute("Selected", selected)
+            btn.BackgroundColor3 = selected and Color3.fromRGB(90, 150, 90) or Color3.fromRGB(60, 60, 60)
         end)
-        return b
     end
-
-    local function selectCategoryItems(category, selected)
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") then
-                local cat = child:GetAttribute("Category") or "Other"
-                if category == "All" or cat == category then
-                    child:SetAttribute("Selected", selected)
-                    child.BackgroundColor3 = selected and Color3.fromRGB(80,140,80) or Color3.fromRGB(60,60,60)
-                end
-            end
-        end
-        updateSelectedStats()
-    end
-
-    local categoryButtons = {}
-    for index, categoryName in ipairs(categoryNames) do
-        local catBtn = Instance.new("TextButton")
-        catBtn.Name = categoryName .. "FilterBtn"
-        catBtn.Size = UDim2.new(0, 58, 0, 24)
-        catBtn.Position = UDim2.new(0.05 + ((index - 1) * 0.16), 0, 0, 0)
-        catBtn.BackgroundColor3 = Color3.fromRGB(45,45,50)
-        catBtn.TextColor3 = Color3.fromRGB(220,220,220)
-        catBtn.Text = categoryName
-        catBtn.Font = Enum.Font.Gotham
-        catBtn.TextSize = 10
-        catBtn.Parent = categoryButtonsFrame
-        Instance.new("UICorner", catBtn).CornerRadius = UDim.new(0, 6)
-
-        catBtn.Activated:Connect(function()
-            selectedCategory = categoryName
-            updateItemVisibility()
-            for _, otherBtn in ipairs(categoryButtons) do
-                otherBtn.BackgroundColor3 = (otherBtn == catBtn) and Color3.fromRGB(78,132,173) or Color3.fromRGB(45,45,50)
-                otherBtn.TextColor3 = (otherBtn == catBtn) and Color3.fromRGB(255,255,255) or Color3.fromRGB(220,220,220)
-            end
-        end)
-        table.insert(categoryButtons, catBtn)
-    end
-
-    categoryButtons[1].BackgroundColor3 = Color3.fromRGB(78,132,173)
-    categoryButtons[1].TextColor3 = Color3.fromRGB(255,255,255)
-
-    -- initial inventory will populate automatically from player containers
-
-    -- small control buttons
-    local selectAll = Instance.new("TextButton")
-    selectAll.Name = "SelectAll"
-    selectAll.Size = UDim2.new(0.28, 0, 0, 26)
-    selectAll.Position = UDim2.new(0.05, 0, 0.66, 0)
-    selectAll.Text = "Select All"
-    selectAll.BackgroundColor3 = Color3.fromRGB(55,55,60)
-    selectAll.TextColor3 = Color3.fromRGB(240,240,240)
-    selectAll.Font = Enum.Font.Gotham
-    selectAll.TextSize = 12
-    selectAll.Parent = frame
-    Instance.new("UICorner", selectAll).CornerRadius = UDim.new(0, 6)
-
-    local clearSel = Instance.new("TextButton")
-    clearSel.Name = "ClearSelection"
-    clearSel.Size = UDim2.new(0.28, 0, 0, 26)
-    clearSel.Position = UDim2.new(0.37, 0, 0.66, 0)
-    clearSel.Text = "Clear"
-    clearSel.BackgroundColor3 = Color3.fromRGB(55,55,60)
-    clearSel.TextColor3 = Color3.fromRGB(240,240,240)
-    clearSel.Font = Enum.Font.Gotham
-    clearSel.TextSize = 12
-    clearSel.Parent = frame
-    Instance.new("UICorner", clearSel).CornerRadius = UDim.new(0, 6)
-
-    local send = Instance.new("TextButton")
-    send.Name = "SendButton"
-    send.Size = UDim2.new(0.45, 0, 0, 26)
-    send.Position = UDim2.new(0.05, 0, 0.76, 0)
-    send.Text = "Send Gift"
-    send.BackgroundColor3 = Color3.fromRGB(60,120,180)
-    send.TextColor3 = Color3.fromRGB(240,240,240)
-    send.Font = Enum.Font.Gotham
-    send.TextSize = 12
-    send.Parent = frame
-    Instance.new("UICorner", send).CornerRadius = UDim.new(0, 6)
-
-    local autoBtn = Instance.new("TextButton")
-    autoBtn.Name = "AutoGiftButton"
-    autoBtn.Size = UDim2.new(0.45, 0, 0, 26)
-    autoBtn.Position = UDim2.new(0.5, 0, 0.76, 0)
-    autoBtn.Text = "Auto Gift OFF"
-    autoBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
-    autoBtn.TextColor3 = Color3.fromRGB(240,240,240)
-    autoBtn.Font = Enum.Font.Gotham
-    autoBtn.TextSize = 12
-    autoBtn.Parent = frame
-    Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 6)
-
-    local mailButton = Instance.new("TextButton")
-    mailButton.Name = "MailButton"
-    mailButton.Size = UDim2.new(0, 80, 0, 30)
-    mailButton.Position = UDim2.new(0, 8, 0, 8)
-    mailButton.Text = "Mail"
-    -- parent set at end to allow integration with existing hack GUI if present
-
-    mailButton.Activated:Connect(function()
-        frame.Visible = not frame.Visible
-        if frame.Visible then
-            syncInventory()
-        end
-    end)
-
-    -- confirmation modal
-    local confirmFrame = Instance.new("Frame")
-    confirmFrame.Name = "ConfirmFrame"
-    confirmFrame.Size = UDim2.new(0, 320, 0, 180)
-    confirmFrame.Position = UDim2.new(0.5, -160, 0.5, -90)
-    confirmFrame.BackgroundColor3 = Color3.fromRGB(18,18,18)
-    confirmFrame.Visible = false
-    confirmFrame.BorderSizePixel = 0
-    confirmFrame.Parent = screen
-
-    local confirmLabel = Instance.new("TextLabel")
-    confirmLabel.Name = "ConfirmLabel"
-    confirmLabel.Size = UDim2.new(1, -20, 1, -60)
-    confirmLabel.Position = UDim2.new(0, 10, 0, 10)
-    confirmLabel.BackgroundTransparency = 1
-    confirmLabel.TextWrapped = true
-    confirmLabel.Text = ""
-    confirmLabel.TextColor3 = Color3.fromRGB(240,240,240)
-    confirmLabel.TextXAlignment = Enum.TextXAlignment.Left
-    confirmLabel.TextYAlignment = Enum.TextYAlignment.Top
-    confirmLabel.Parent = confirmFrame
-
-    local confirmBtn = Instance.new("TextButton")
-    confirmBtn.Name = "ConfirmBtn"
-    confirmBtn.Size = UDim2.new(0.4, 0, 0, 32)
-    confirmBtn.Position = UDim2.new(0.1, 0, 1, -40)
-    confirmBtn.Text = "Confirm"
-    confirmBtn.Parent = confirmFrame
-
-    local cancelBtn = Instance.new("TextButton")
-    cancelBtn.Name = "CancelBtn"
-    cancelBtn.Size = UDim2.new(0.4, 0, 0, 32)
-    cancelBtn.Position = UDim2.new(0.5, 0, 1, -40)
-    cancelBtn.Text = "Cancel"
-    cancelBtn.Parent = confirmFrame
-
-    selectAll.Activated:Connect(function()
-        selectCategoryItems(selectedCategory, true)
-    end)
-
-    clearSel.Activated:Connect(function()
-        selectCategoryItems("All", false)
-    end)
-
-    -- sync inventory: try common locations (Backpack, Character, Inventory, ReplicatedStorage)
-    local function syncInventory()
-        PlayerStatus("Syncing inventory...")
-        -- remove existing dynamic items
+    local function refreshInventory()
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") then
                 child:Destroy()
             end
         end
-
         local inventoryMap = {}
-        local function addInventoryItem(name, quantity)
-            if not name or name == "" then return end
-            local qty = tonumber(quantity) or 1
-            inventoryMap[name] = (inventoryMap[name] or 0) + qty
+        collectInventoryItems(inventoryMap)
+        local total = 0
+        for itemName, qty in pairs(inventoryMap) do
+            addItemButton(itemName, qty)
+            total = total + 1
         end
-
-        local function getObjectName(v)
-            if v:IsA("StringValue") then
-                return v.Value or v.Name
-            end
-            return v.Name
-        end
-
-        local function getObjectQuantity(v)
-            if v.GetAttribute then
-                for _, key in ipairs({"Quantity", "Amount", "Count", "Stack", "StackSize"}) do
-                    local q = v:GetAttribute(key)
-                    if tonumber(q) then
-                        return tonumber(q)
-                    end
-                end
-            end
-            if v:IsA("IntValue") or v:IsA("NumberValue") then
-                return v.Value
-            end
-            for _, key in ipairs({"Quantity", "Amount", "Count", "Stack", "StackSize"}) do
-                local child = v:FindFirstChild(key)
-                if child and (child:IsA("IntValue") or child:IsA("NumberValue")) then
-                    return child.Value
-                end
-            end
-            return 1
-        end
-
-        local function isInventoryContainer(obj)
-            return obj and (obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("Folder") or obj:IsA("Folder"))
-        end
-
-        local function scanContainer(container)
-            if not container then return end
-            for _, item in ipairs(container:GetChildren()) do
-                local name = getObjectName(item)
-                local qty = getObjectQuantity(item)
-                if item:IsA("Tool") or item:IsA("Model") or item:IsA("Folder") then
-                    addInventoryItem(name, qty)
-                    for _, child in ipairs(item:GetChildren()) do
-                        if child:IsA("Tool") or child:IsA("Model") or child:IsA("Folder") then
-                            local childName = getObjectName(child)
-                            local childQty = getObjectQuantity(child)
-                            addInventoryItem(childName, childQty)
-                        end
-                    end
-                elseif item:IsA("StringValue") or item:IsA("ObjectValue") then
-                    addInventoryItem(name, qty)
-                elseif item:IsA("IntValue") or item:IsA("NumberValue") then
-                    -- skip raw numeric values inside item containers
-                else
-                    addInventoryItem(name, qty)
-                end
-            end
-        end
-
-        local function findContainers(root)
-            local result = {}
-            local seen = {}
-            local names = {"Backpack", "Inventory", "_Inventory", "Items", "Store", "Shop", "Storage", "Bag", "Chest"}
-            local function addIfValid(obj)
-                if obj and not seen[obj] and obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Tool") then
-                    table.insert(result, obj)
-                    seen[obj] = true
-                end
-            end
-            if root then
-                for _, name in ipairs(names) do
-                    addIfValid(root:FindFirstChild(name))
-                end
-                for _, descendant in ipairs(root:GetDescendants()) do
-                    if descendant:IsA("Folder") or descendant:IsA("Model") or descendant:IsA("Tool") then
-                        local lname = descendant.Name:lower()
-                        for _, key in ipairs(names) do
-                            if lname:find(key:lower(), 1, true) then
-                                addIfValid(descendant)
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-            return result
-        end
-
-        local containers = {}
-        local function addContainersFrom(root)
-            for _, c in ipairs(findContainers(root)) do
-                table.insert(containers, c)
-            end
-        end
-
-        addContainersFrom(LocalPlayer)
-        addContainersFrom(LocalPlayer.Character)
-        addContainersFrom(game:GetService("ReplicatedStorage"))
-        addContainersFrom(game:GetService("ServerStorage"))
-        addContainersFrom(game:GetService("StarterPack"))
-        addContainersFrom(workspace)
-
-        if #containers == 0 then
-            addInventoryItem("Item1", 1)
-            addInventoryItem("Item2", 1)
-            addInventoryItem("Item3", 1)
+        updateCanvas()
+        if total == 0 then
+            setStatus("Inventory tidak terdeteksi. Tekan Sync Inventory setelah buka inventory.")
         else
-            for _, container in ipairs(containers) do
-                scanContainer(container)
+            setStatus("Inventory terdeteksi: " .. tostring(total) .. " item")
+        end
+    end
+    local function selectVisibleItems(select)
+        for _, child in ipairs(itemList:GetChildren()) do
+            if child:IsA("TextButton") then
+                local category = child:GetAttribute("Category") or "Other"
+                if selectedCategory == "All" or category == selectedCategory then
+                    child:SetAttribute("Selected", select)
+                    child.BackgroundColor3 = select and Color3.fromRGB(90, 150, 90) or Color3.fromRGB(60, 60, 60)
+                end
             end
         end
-
-        local added = 0
-        for name, qty in pairs(inventoryMap) do
-            addItem(name, name, qty)
-            added = added + 1
-        end
-
-        -- resize canvas after UI update
-        spawn(function()
-            wait()
-            itemList.CanvasSize = UDim2.new(0, 0, 0, uiLayout.AbsoluteContentSize.Y)
-            updateItemVisibility()
-            selectedLabel.Text = "Selected items: 0 | Qty: 0"
-            PlayerStatus("Inventory synced: " .. tostring(added))
-        end)
     end
-
-    syncInventoryFunction = syncInventory
-
-    local autoGiftEnabled = false
-    local autoGiftRunning = false
-
-    local function updateAutoButton()
-        autoBtn.Text = autoGiftEnabled and "Auto Gift ON" or "Auto Gift OFF"
-        autoBtn.BackgroundColor3 = autoGiftEnabled and Color3.fromRGB(90, 135, 90) or Color3.fromRGB(180, 80, 80)
-    end
-
     local function getSelectedItems()
-        local selectedItems = {}
+        local selected = {}
         for _, child in ipairs(itemList:GetChildren()) do
             if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                table.insert(selectedItems, {
-                    name = child.Name,
+                table.insert(selected, {
+                    name = extractName(child),
                     qty = tonumber(child:GetAttribute("Quantity")) or 1,
-                    category = child:GetAttribute("Category") or "Other"
                 })
             end
         end
-        return selectedItems
+        return selected
     end
-
-    local function autoGiftLoop()
-        if autoGiftRunning then return end
-        autoGiftRunning = true
-        spawn(function()
-            while autoGiftEnabled do
-                local recip = usernameBox.Text
-                local targetCount = tonumber(quantityBox.Text) or 1
-                local selectedItems = getSelectedItems()
-                local totalQty = 0
-                for _, item in ipairs(selectedItems) do
-                    totalQty = totalQty + item.qty
+    local function findButtonByHints(root, hints)
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+                local label = normalizeText(obj.Text):lower()
+                local name = obj.Name:lower()
+                for _, hint in ipairs(hints) do
+                    if label:find(hint, 1, true) or name:find(hint, 1, true) then
+                        return obj
+                    end
                 end
-
-                if recip == "" then
-                    PlayerStatus("Auto Gift stopped: recipient username kosong")
-                    autoGiftEnabled = false
-                    updateAutoButton()
-                    break
-                end
-
-                if totalQty <= 0 then
-                    PlayerStatus("Auto Gift stopped: tidak ada item terpilih")
-                    autoGiftEnabled = false
-                    updateAutoButton()
-                    break
-                end
-
-                local sendCount = math.min(targetCount, totalQty)
-                PlayerStatus("Auto Gift loop sending " .. tostring(sendCount) .. " qty to " .. tostring(recip))
-                if not AutoGiftMail(recip, sendCount) then
-                    PlayerStatus("Auto Gift gagal")
-                    autoGiftEnabled = false
-                    updateAutoButton()
-                    break
-                end
-
-                wait(3)
-            end
-            autoGiftRunning = false
-        end)
-    end
-
-    autoBtn.Activated:Connect(function()
-        autoGiftEnabled = not autoGiftEnabled
-        updateAutoButton()
-        if autoGiftEnabled then
-            autoGiftLoop()
-        end
-    end)
-
-    send.Activated:Connect(function()
-        local recip = usernameBox.Text
-        if recip == "" then
-            PlayerStatus("Masukkan username penerima terlebih dahulu")
-            return
-        end
-        local selectedList = getSelectedItems()
-        local totalQty = 0
-        for _, it in ipairs(selectedList) do
-            totalQty = totalQty + it.qty
-        end
-        if #selectedList == 0 then
-            PlayerStatus("No items selected")
-            return
-        end
-        local summary = "Send to: " .. tostring(recip) .. "\nTotal Items: " .. tostring(#selectedList) .. "\nTotal Qty: " .. tostring(totalQty) .. "\nItems:\n"
-        for _, it in ipairs(selectedList) do
-            summary = summary .. "- " .. tostring(it.name)
-            if it.qty then summary = summary .. " x" .. tostring(it.qty) end
-            summary = summary .. "\n"
-        end
-        confirmLabel.Text = summary
-        confirmFrame.Visible = true
-    end)
-
-    confirmBtn.Activated:Connect(function()
-        confirmFrame.Visible = false
-        local recip = usernameBox.Text
-        local totalQty = 0
-        for _, child in ipairs(itemList:GetChildren()) do
-            if child:IsA("TextButton") and child:GetAttribute("Selected") then
-                totalQty = totalQty + (tonumber(child:GetAttribute("Quantity")) or 1)
             end
         end
-        PlayerStatus("Confirmed send: " .. tostring(recip) .. " qty=" .. tostring(totalQty))
-        AutoGiftMail(recip, totalQty)
-    end)
-
-    cancelBtn.Activated:Connect(function()
-        confirmFrame.Visible = false
-    end)
-
-    -- finalize
-    spawn(function()
-        wait()
-        itemList.CanvasSize = UDim2.new(0, 0, 0, uiLayout.AbsoluteContentSize.Y)
-    end)
-
-    -- If a known external GUI exists (e.g. MainHackGUI), parent our mail UI there for integration
-    local hackGui = PlayerGui:FindFirstChild("MainHackGUI") or PlayerGui:FindFirstChild("MainHack")
-    if hackGui and hackGui:IsA("ScreenGui") then
-        screen.Parent = hackGui
-        -- try to attach the toggle button to the hack GUI's main frame if available
-        local targetFrame = hackGui:FindFirstChild("MainFrame") or hackGui:FindFirstChildWhichIsA("Frame")
-        if targetFrame then
-            mailButton.Parent = targetFrame
-            mailButton.Position = UDim2.new(0, 8, 0, 8)
-        else
-            mailButton.Parent = screen
-        end
-    else
-        screen.Parent = PlayerGui
-        mailButton.Parent = screen
+        return nil
     end
-
-    -- load current inventory automatically
-    syncInventory()
-end
-local function sleep(seconds)
-    if task and task.wait then
-        task.wait(seconds)
-    else
-        wait(seconds)
-    end
-end
-
-local function findGui(path)
-    local current = PlayerGui
-    for _, name in ipairs(path) do
-        if not current then
-            return nil
+    local function findTextBoxByHints(root, hints)
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("TextBox") then
+                local searchText = normalizeText((obj.PlaceholderText or "") .. " " .. obj.Name .. " " .. (obj.Text or "")):lower()
+                for _, hint in ipairs(hints) do
+                    if searchText:find(hint, 1, true) then
+                        return obj
+                    end
+                end
+            end
         end
-        current = current:FindFirstChild(name) or current:FindFirstChild(name, true)
-        if not current then
-            return nil
-        end
+        return nil
     end
-    return current
-end
-
-local function activateButton(button)
-    if not button then
+    local function findMailRoot()
+        local hints = {"mail", "surat", "gift", "post", "parcel", "kirim"}
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            if (obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("ScreenGui")) and obj.Name:lower() ~= "mailgui" then
+                local name = obj.Name:lower()
+                for _, hint in ipairs(hints) do
+                    if name:find(hint, 1, true) then
+                        local btn = findButtonByHints(obj, {"send", "kirim", "post", "confirm", "ok", "submit"})
+                        if btn then
+                            return obj
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    local function clickButton(button)
+        if not button then
+            return false
+        end
+        if button:IsA("TextButton") or button:IsA("ImageButton") then
+            pcall(function()
+                button:Activate()
+            end)
+            return true
+        end
         return false
     end
-
-    if button:IsA("TextButton") or button:IsA("ImageButton") then
-        pcall(function()
-            button:Activate()
-        end)
-        return true
-    end
-
-    if button:IsA("TextBox") then
-        pcall(function()
-            button:CaptureFocus()
-        end)
-        return true
-    end
-
-    return false
-end
-
-local function setText(box, text)
-    if not box or not box:IsA("TextBox") then
-        return false
-    end
-
-    box.Text = tostring(text)
-    return true
-end
-
-local function getItemButtons()
-    local container = findGui(uiPath.ItemList)
-    if not container then
-        return {}
-    end
-
-    local buttons = {}
-    for _, child in ipairs(container:GetDescendants()) do
-        if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
-            table.insert(buttons, child)
+    local function openMailMenu()
+        local openBtn = findButtonByHints(PlayerGui, {"mail", "surat", "post", "gift", "kirim hadiah", "open mail"})
+        if openBtn then
+            return clickButton(openBtn)
         end
-    end
-    return buttons
-end
-
-local function openMailMenu()
-    local mailButton = findGui(uiPath.MailButton)
-    if mailButton then
-        return activateButton(mailButton)
-    end
-    return findGui(uiPath.MailFrame) ~= nil
-end
-
-local function typeUsername(username)
-    local box = findGui(uiPath.UsernameBox)
-    if not box then
         return false
     end
-
-    if not setText(box, username) then
-        return false
-    end
-
-    sleep(0.2)
-    if box:IsA("TextBox") then
+    local function typeMailUsername(value)
+        local root = findMailRoot() or PlayerGui
+        local box = findTextBoxByHints(root, {"username", "recipient", "player", "to", "penerima", "nama"})
+        if not box then
+            return false
+        end
+        box.Text = tostring(value)
         pcall(function()
             box:ReleaseFocus()
         end)
+        return true
     end
-    return true
-end
-
-local function clearSelectedItems()
-    local container = findGui(uiPath.ItemList)
-    if not container then
-        return
-    end
-    for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("TextButton") and child:GetAttribute("Selected") then
-            child:SetAttribute("Selected", false)
-            child.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    local function clickMailItem(itemName)
+        local root = findMailRoot() or PlayerGui
+        local lowerName = itemName:lower()
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+                local label = normalizeText(obj.Text ~= "" and obj.Text or obj.Name):lower()
+                if label:find(lowerName, 1, true) then
+                    if clickButton(obj) then
+                        return true
+                    end
+                end
+            end
         end
-    end
-end
-
-local function selectMailItems(itemCount)
-    local container = findGui(uiPath.ItemList)
-    if not container then
-        return itemCount, false
-    end
-
-    local selected = {}
-    for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("TextButton") and child:GetAttribute("Selected") then
-            table.insert(selected, child)
-        end
-    end
-
-    if #selected == 0 then
-        return itemCount, false
-    end
-
-    local used = false
-    for _, button in ipairs(selected) do
-        if itemCount <= 0 then break end
-        local qty = tonumber(button:GetAttribute("Quantity")) or 1
-        if activateButton(button) then
-            itemCount = itemCount - qty
-            used = true
-            sleep(0.05)
-        end
-    end
-
-    return math.max(itemCount, 0), used
-end
-
-local function clickSendMail()
-    return activateButton(findGui(uiPath.SendButton))
-end
-
-local function PlayerStatus(text)
-    print("[AutoGiftMail] " .. tostring(text))
-end
-
-local function AutoGiftMail(username, itemCount)
-    PlayerStatus("Auto gift mail start: " .. tostring(username))
-
-    if not openMailMenu() then
-        PlayerStatus("Mail menu open failed")
         return false
     end
-
-    sleep(0.5)
-    if not typeUsername(username) then
-        PlayerStatus("Username entry failed")
+    local function clickSendMailButton()
+        local root = findMailRoot() or PlayerGui
+        local btn = findButtonByHints(root, {"send", "kirim", "post", "submit", "ok", "confirm"})
+        if btn then
+            return clickButton(btn)
+        end
         return false
     end
-
-    sleep(0.5)
-    while itemCount > 0 do
-        local remaining, used = selectMailItems(itemCount)
-        if not used then
-            PlayerStatus("No mail items selected")
+    local function sendByMail(recipient, maxQty)
+        setStatus("Mencari menu mail...")
+        if not openMailMenu() then
+            setStatus("Tidak menemukan tombol mail")
             return false
         end
-
-        itemCount = remaining
-        if not clickSendMail() then
-            PlayerStatus("Send button not found")
+        task.wait(0.4)
+        if not typeMailUsername(recipient) then
+            setStatus("Kotak username mail tidak ditemukan")
             return false
         end
-
-        sleep(1.5)
-        if itemCount <= 0 then
-            break
+        task.wait(0.2)
+        local selectedItems = getSelectedItems()
+        if #selectedItems == 0 then
+            setStatus("Tidak ada item terpilih")
+            return false
         end
-
-        sleep(0.5)
+        local sent = 0
+        for _, item in ipairs(selectedItems) do
+            for i = 1, item.qty do
+                if sent >= maxQty then
+                    break
+                end
+                if clickMailItem(item.name) then
+                    sent = sent + 1
+                    task.wait(0.12)
+                else
+                    break
+                end
+            end
+            if sent >= maxQty then
+                break
+            end
+        end
+        if sent == 0 then
+            setStatus("Item tidak berhasil dipilih di mail")
+            return false
+        end
+        if not clickSendMailButton() then
+            setStatus("Tombol kirim mail tidak ditemukan")
+            return false
+        end
+        setStatus("Mengirim " .. tostring(sent) .. " item ke " .. tostring(recipient))
+        return true
     end
-
-    PlayerStatus("Auto gift mail completed")
-    return true
+    local syncButton = Instance.new("TextButton")
+    syncButton.Name = "SyncButton"
+    syncButton.Size = UDim2.new(0.3, 0, 0, 32)
+    syncButton.Position = UDim2.new(0, 8, 0, 266)
+    syncButton.Text = "Sync Inventory"
+    syncButton.BackgroundColor3 = Color3.fromRGB(78, 78, 88)
+    syncButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    syncButton.Font = Enum.Font.Gotham
+    syncButton.TextSize = 12
+    syncButton.Parent = frame
+    Instance.new("UICorner", syncButton).CornerRadius = UDim.new(0, 6)
+    local sendButton = Instance.new("TextButton")
+    sendButton.Name = "SendButton"
+    sendButton.Size = UDim2.new(0.3, 0, 0, 32)
+    sendButton.Position = UDim2.new(0.34, 0, 0, 266)
+    sendButton.Text = "Send Mail"
+    sendButton.BackgroundColor3 = Color3.fromRGB(75, 125, 180)
+    sendButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    sendButton.Font = Enum.Font.Gotham
+    sendButton.TextSize = 12
+    sendButton.Parent = frame
+    Instance.new("UICorner", sendButton).CornerRadius = UDim.new(0, 6)
+    local autoButton = Instance.new("TextButton")
+    autoButton.Name = "AutoGiftButton"
+    autoButton.Size = UDim2.new(0.3, 0, 0, 32)
+    autoButton.Position = UDim2.new(0.68, 0, 0, 266)
+    autoButton.Text = "Auto Gift OFF"
+    autoButton.BackgroundColor3 = Color3.fromRGB(175, 80, 80)
+    autoButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    autoButton.Font = Enum.Font.Gotham
+    autoButton.TextSize = 12
+    autoButton.Parent = frame
+    Instance.new("UICorner", autoButton).CornerRadius = UDim.new(0, 6)
+    local selectAllButton = Instance.new("TextButton")
+    selectAllButton.Name = "SelectAll"
+    selectAllButton.Size = UDim2.new(0.22, 0, 0, 28)
+    selectAllButton.Position = UDim2.new(0, 8, 0, 228)
+    selectAllButton.Text = "Select All"
+    selectAllButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+    selectAllButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    selectAllButton.Font = Enum.Font.Gotham
+    selectAllButton.TextSize = 12
+    selectAllButton.Parent = frame
+    Instance.new("UICorner", selectAllButton).CornerRadius = UDim.new(0, 6)
+    local clearButton = Instance.new("TextButton")
+    clearButton.Name = "ClearSelection"
+    clearButton.Size = UDim2.new(0.22, 0, 0, 28)
+    clearButton.Position = UDim2.new(0.24, 0, 0, 228)
+    clearButton.Text = "Clear"
+    clearButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+    clearButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+    clearButton.Font = Enum.Font.Gotham
+    clearButton.TextSize = 12
+    clearButton.Parent = frame
+    Instance.new("UICorner", clearButton).CornerRadius = UDim.new(0, 6)
+    local autoEnabled = false
+    local autoRunning = false
+    local function updateAutoButton()
+        autoButton.Text = autoEnabled and "Auto Gift ON" or "Auto Gift OFF"
+        autoButton.BackgroundColor3 = autoEnabled and Color3.fromRGB(90, 150, 90) or Color3.fromRGB(175, 80, 80)
+    end
+    local function getSelectedSummary()
+        local items = getSelectedItems()
+        local total = 0
+        for _, item in ipairs(items) do
+            total = total + (item.qty or 1)
+        end
+        return items, total
+    end
+    local function autoGiftLoop()
+        if autoRunning then
+            return
+        end
+        autoRunning = true
+        spawn(function()
+            while autoEnabled do
+                local recipient = usernameBox.Text
+                local targetQty = tonumber(quantityBox.Text) or 1
+                local items, totalQty = getSelectedSummary()
+                if recipient == "" then
+                    setStatus("Auto Gift berhenti: username kosong")
+                    autoEnabled = false
+                    updateAutoButton()
+                    break
+                end
+                if totalQty <= 0 then
+                    setStatus("Auto Gift berhenti: tidak ada item terpilih")
+                    autoEnabled = false
+                    updateAutoButton()
+                    break
+                end
+                local sendQty = math.min(targetQty, totalQty)
+                setStatus("Auto Gift kirim " .. tostring(sendQty) .. " item ke " .. recipient)
+                if not sendByMail(recipient, sendQty) then
+                    setStatus("Auto Gift gagal")
+                    autoEnabled = false
+                    updateAutoButton()
+                    break
+                end
+                task.wait(3)
+            end
+            autoRunning = false
+        end)
+    end
+    syncButton.Activated:Connect(refreshInventory)
+    sendButton.Activated:Connect(function()
+        local recipient = usernameBox.Text
+        if recipient == "" then
+            setStatus("Masukkan username penerima terlebih dahulu")
+            return
+        end
+        local qty = tonumber(quantityBox.Text) or 1
+        sendByMail(recipient, qty)
+    end)
+    selectAllButton.Activated:Connect(function()
+        selectVisibleItems(true)
+    end)
+    clearButton.Activated:Connect(function()
+        selectVisibleItems(false)
+    end)
+    autoButton.Activated:Connect(function()
+        autoEnabled = not autoEnabled
+        updateAutoButton()
+        if autoEnabled then
+            autoGiftLoop()
+        end
+    end)
+    refreshInventory()
+    updateCanvas()
+    syncInventoryFunction = refreshInventory
 end
 
-local function MainLoop()
-    local username = settings.AutoMail.username
-    local itemCount = tonumber(settings.AutoMail.itemcount) or 20
-    AutoGiftMail(username, itemCount)
-end
-
-local function Start()
-    MainLoop()
-end
-
--- ensure UI exists when starting
 local function EnsureUI()
     pcall(createMailGui)
 end
-
-EnsureUI()
 
 local function SyncInventory()
     EnsureUI()
@@ -894,9 +745,21 @@ local function SyncInventory()
     return false
 end
 
+local function Start()
+    EnsureUI()
+    local username = settings.AutoMail.username
+    local count = tonumber(settings.AutoMail.itemcount) or 20
+    if username == "" then
+        print("[GrowAGarden2 Mail] Username kosong")
+        return
+    end
+    SyncInventory()
+end
+
+EnsureUI()
+
 return {
     Start = Start,
-    AutoGiftMail = AutoGiftMail,
     SyncInventory = SyncInventory,
     settings = settings,
 }
